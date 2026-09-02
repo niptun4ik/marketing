@@ -1,0 +1,125 @@
+// components/Dashboard.jsx
+import { useMemo, useState } from 'react'
+import KPICards from './KPICards'
+import FiltersBar from './FiltersBar'
+import DashboardCharts from './DashboardCharts'
+import AnalyticsTable from './AnalyticsTable'
+import ExportButton from './ExportButton'
+import {
+  matchAndAggregate,
+  computeTotals,
+  buildCampaignChartData,
+  buildDailyChartData,
+  buildFunnelData,
+} from '../utils/matchData'
+import { Link2, Link } from 'lucide-react'
+
+const DEFAULT_FILTERS = {
+  search: '',
+  dateFrom: '',
+  dateTo: '',
+  stages: ['Новая', 'В работе', 'Успешно', 'Проиграна'],
+}
+
+export default function Dashboard({ metaRows, bitrixRows }) {
+  const [matchKey, setMatchKey] = useState('campaign')  // 'campaign' | 'ad'
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
+
+  // Filter Bitrix rows by date and stage
+  const filteredBitrix = useMemo(() => {
+    return bitrixRows.filter((deal) => {
+      const date = deal.created_date?.split('T')[0] || ''
+      if (filters.dateFrom && date < filters.dateFrom) return false
+      if (filters.dateTo   && date > filters.dateTo)   return false
+      const stage = (deal.stage || '').trim()
+      if (filters.stages && !filters.stages.includes(stage)) return false
+      return true
+    })
+  }, [bitrixRows, filters])
+
+  // Match + aggregate
+  const campaigns = useMemo(
+    () => matchAndAggregate(metaRows, filteredBitrix, matchKey),
+    [metaRows, filteredBitrix, matchKey]
+  )
+
+  // Search filter on campaign level
+  const filteredCampaigns = useMemo(() => {
+    if (!filters.search) return campaigns
+    const q = filters.search.toLowerCase()
+    return campaigns.filter((c) => c.campaign_name.toLowerCase().includes(q))
+  }, [campaigns, filters.search])
+
+  const totals = useMemo(() => computeTotals(filteredCampaigns), [filteredCampaigns])
+
+  const chartData = useMemo(() => ({
+    campaignData: buildCampaignChartData(filteredCampaigns),
+    dailyData:    buildDailyChartData(filteredCampaigns),
+  }), [filteredCampaigns])
+
+  const funnelData = useMemo(() => buildFunnelData(totals), [totals])
+
+  return (
+    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in">
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Сводная аналитика</h2>
+          <p className="text-xs text-gray-400">
+            {metaRows.length} строк Meta · {bitrixRows.length} сделок Bitrix24
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Match key toggle */}
+          <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+            <button
+              onClick={() => setMatchKey('campaign')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                matchKey === 'campaign'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Link2 size={12} /> По кампании
+            </button>
+            <button
+              onClick={() => setMatchKey('ad')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                matchKey === 'ad'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Link size={12} /> По объявлению
+            </button>
+          </div>
+          <ExportButton campaigns={filteredCampaigns} />
+        </div>
+      </div>
+
+      {/* KPIs */}
+      <KPICards totals={totals} />
+
+      {/* Filters */}
+      <FiltersBar filters={filters} onChange={setFilters} />
+
+      {/* Charts */}
+      <DashboardCharts chartData={chartData} funnelData={funnelData} />
+
+      {/* Table */}
+      <AnalyticsTable campaigns={filteredCampaigns} totals={totals} />
+
+      {/* Legend */}
+      <div className="flex items-center gap-4 text-xs text-gray-400 pb-4">
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-green-200 dark:bg-green-900/40" />
+          ROAS ≥ 100%
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="w-3 h-3 rounded bg-red-200 dark:bg-red-900/40" />
+          Spend &gt; 0, Продаж = 0 или убыток
+        </div>
+      </div>
+    </div>
+  )
+}
