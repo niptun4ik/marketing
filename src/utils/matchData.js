@@ -116,7 +116,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
   return campaigns
 }
 
-export function computeCampaignMetrics(totals = {}, bxDeals = []) {
+export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
   const spend       = toNum(totals.spend)
   const impressions = toNum(totals.impressions)
   const clicks      = toNum(totals.clicks)
@@ -136,10 +136,12 @@ export function computeCampaignMetrics(totals = {}, bxDeals = []) {
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
   const cpo      = wonDeals > 0  ? spend / wonDeals : 0
   const roas     = spend > 0     ? ((revenue - spend) / spend) * 100 : 0
+  // ROMI учитывает маржинальность: (выручка * маржа - затраты) / затраты * 100
+  const romi     = spend > 0     ? ((revenue * Math.min(margin, 1) - spend) / spend) * 100 : 0
 
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals,
-    revenue, ctr, cpc, metaCr, bxCr, cpl, metaCpl, winRate, cpo, roas,
+    revenue, ctr, cpc, metaCr, bxCr, cpl, metaCpl, winRate, cpo, roas, romi,
     rowStatus: spend > 0 && (wonDeals === 0 || roas < 0) ? 'red'
              : roas >= 100 ? 'green'
              : 'neutral',

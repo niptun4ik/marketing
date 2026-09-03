@@ -5,9 +5,11 @@ import FiltersBar from './FiltersBar'
 import DashboardCharts from './DashboardCharts'
 import AnalyticsTable from './AnalyticsTable'
 import ExportButton from './ExportButton'
+import PlanFactPanel from './PlanFactPanel'
 import {
   matchAndAggregate,
   computeTotals,
+  computeCampaignMetrics,
   buildCampaignChartData,
   buildDailyChartData,
   buildFunnelData,
@@ -25,6 +27,7 @@ const DEFAULT_FILTERS = {
 export default function Dashboard({ metaRows, bitrixRows }) {
   const [matchKey, setMatchKey] = useState('campaign')  // 'campaign' | 'ad'
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
+  const [margin, setMargin] = useState(30)  // маржинальность в %
 
   // Filter Bitrix rows by date and stage
   const filteredBitrix = useMemo(() => {
@@ -70,7 +73,20 @@ export default function Dashboard({ metaRows, bitrixRows }) {
     return res
   }, [campaigns, filters.search, filters.hiddenCampaigns])
 
-  const totals = useMemo(() => computeTotals(filteredCampaigns), [filteredCampaigns])
+  const totals = useMemo(() => {
+    // Пересчитываем с учётом маржинальности для ROMI
+    const allDeals = filteredCampaigns.flatMap(c => c?.bxDeals || [])
+    const aggTotals = filteredCampaigns.reduce(
+      (acc, c) => ({
+        spend:       acc.spend + (c?.totals?.spend || 0),
+        impressions: acc.impressions + (c?.totals?.impressions || 0),
+        clicks:      acc.clicks + (c?.totals?.clicks || 0),
+        leads:       acc.leads + (c?.totals?.leads || 0),
+      }),
+      { spend: 0, impressions: 0, clicks: 0, leads: 0 }
+    )
+    return computeCampaignMetrics(aggTotals, allDeals, margin / 100)
+  }, [filteredCampaigns, margin])
 
   const chartData = useMemo(() => ({
     campaignData: buildCampaignChartData(filteredCampaigns),
@@ -118,7 +134,10 @@ export default function Dashboard({ metaRows, bitrixRows }) {
       </div>
 
       {/* KPIs */}
-      <KPICards totals={totals} />
+      <KPICards totals={totals} margin={margin} onMarginChange={setMargin} />
+
+      {/* Plan-Fact */}
+      <PlanFactPanel totals={totals} />
 
       {/* Filters */}
       <FiltersBar filters={filters} onChange={setFilters} />
