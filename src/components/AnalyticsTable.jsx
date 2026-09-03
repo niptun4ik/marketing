@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, EyeOff } from 'lucide-react'
 import { toNum, isWonStage } from '../utils/matchData'
+import { supabase } from '../supabaseClient'
 
 const fmt = (n, { style, dec = 0, fallback = '—' } = {}) => {
   if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return fallback
@@ -133,9 +134,39 @@ function AdSetRow({ adset, bxDeals }) {
 }
 
 // Campaign-level row
-function CampaignRow({ campaign, onHide }) {
+function CampaignRow({ campaign, onHide, plans, onPlanChange, isSaving }) {
   const [open, setOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const m = campaign.metrics
+  const name = campaign.campaign_name
+  const plan = plans[name] || {}
+
+  const p = {
+    budget:  parseFloat(plan.budget  || 0),
+    leads:   parseFloat(plan.leads   || 0),
+    cpl:     parseFloat(plan.cpl     || 0),
+    revenue: parseFloat(plan.revenue || 0),
+  }
+  const hasPlan = p.budget || p.leads || p.cpl || p.revenue
+
+  function Bar({ fact, plan, invert = false }) {
+    if (!plan) return null
+    const pct = Math.min((fact / plan) * 100, 100)
+    const isGood = invert ? fact <= plan : fact >= plan
+    return (
+      <div className="flex items-center gap-2 min-w-[120px]">
+        <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-1.5 overflow-hidden">
+          <div
+            className={`h-1.5 rounded-full transition-all duration-500 ${isGood ? 'bg-green-500' : pct >= 80 ? 'bg-amber-400' : 'bg-red-500'}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={`text-[10px] font-semibold shrink-0 ${isGood ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+          {((fact / plan) * 100).toFixed(0)}%
+        </span>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -152,10 +183,22 @@ function CampaignRow({ campaign, onHide }) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
-                  {campaign.campaign_name}
+                  {name}
                 </p>
+                {hasPlan && (
+                  <span className="text-[9px] bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 px-1.5 py-0.5 rounded-full font-bold shrink-0">
+                    KPI
+                  </span>
+                )}
                 <button
-                  onClick={(e) => { e.stopPropagation(); onHide?.(campaign.campaign_name) }}
+                  onClick={(e) => { e.stopPropagation(); setPlanOpen(o => !o) }}
+                  className="opacity-0 group-hover/row:opacity-100 p-1 hover:bg-brand-50 dark:hover:bg-brand-900/20 rounded transition-all text-gray-400 hover:text-brand-500"
+                  title="Задать план для кампании"
+                >
+                  🎯
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onHide?.(name) }}
                   className="opacity-0 group-hover/row:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                   title="Скрыть кампанию из статистики"
                 >
@@ -172,6 +215,49 @@ function CampaignRow({ campaign, onHide }) {
           <td key={col.key} className="table-td text-right font-medium">{renderCell(col, m)}</td>
         ))}
       </tr>
+
+      {/* Plan-Fact sub-row */}
+      {planOpen && (
+        <tr className="border-b border-brand-100 dark:border-brand-900/30 bg-brand-50/40 dark:bg-brand-900/10">
+          <td colSpan={COLUMNS.length} className="px-4 py-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex items-center gap-2 self-center mr-1">
+                <p className="text-xs font-bold text-brand-600 dark:text-brand-400">🎯 План:</p>
+                {isSaving && (
+                  <span className="text-[10px] text-gray-400 animate-pulse">💾 сохраняется...</span>
+                )}
+              </div>
+              {[
+                { key: 'budget',  label: 'Бюджет ($)',     fact: m.spend,    invert: true },
+                { key: 'leads',   label: 'Лиды (Meta)',    fact: m.metaLeads },
+                { key: 'cpl',     label: 'Цел. CPL ($)',   fact: m.metaCpl,  invert: true },
+                { key: 'revenue', label: 'Выручка ($)',    fact: m.revenue },
+              ].map(({ key, label, fact, invert }) => (
+                <div key={key} className="flex flex-col gap-1 min-w-[110px]">
+                  <label className="text-[10px] text-gray-500 dark:text-gray-400 font-medium">{label}</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="не задан"
+                    value={plan[key] || ''}
+                    onClick={e => e.stopPropagation()}
+                    onChange={e => onPlanChange(name, { ...plan, [key]: e.target.value })}
+                    className="input-base text-xs py-1.5 w-full"
+                  />
+                  {plan[key] && <Bar fact={fact} plan={parseFloat(plan[key])} invert={invert} />}
+                </div>
+              ))}
+              <button
+                onClick={e => { e.stopPropagation(); onPlanChange(name, {}); setPlanOpen(false) }}
+                className="text-[10px] text-red-400 hover:text-red-600 transition-colors self-end pb-1"
+              >
+                Сбросить план
+              </button>
+            </div>
+          </td>
+        </tr>
+      )}
+
       {open && campaign.adsets.map((adset, i) => (
         <AdSetRow key={i} adset={adset} bxDeals={campaign.bxDeals} />
       ))}
@@ -193,8 +279,67 @@ function TotalsRow({ totals }) {
   )
 }
 
-export default function AnalyticsTable({ campaigns, totals, onHideCampaign }) {
+export default function AnalyticsTable({ campaigns, totals, onHideCampaign, session }) {
   const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
+
+  // Plans — stored in Supabase so all users see the same data
+  const [plans, setPlans] = useState({})
+  const [savingPlan, setSavingPlan] = useState(null) // campaign name currently saving
+
+  // Load all plans for this user on mount
+  useEffect(() => {
+    if (!session?.user?.id) return
+    supabase
+      .from('campaign_plans')
+      .select('*')
+      .eq('user_id', session.user.id)
+      .then(({ data }) => {
+        if (!data) return
+        const map = {}
+        for (const row of data) {
+          map[row.campaign_name] = {
+            budget:  row.budget  ?? '',
+            leads:   row.leads   ?? '',
+            cpl:     row.cpl     ?? '',
+            revenue: row.revenue ?? '',
+          }
+        }
+        setPlans(map)
+      })
+  }, [session])
+
+  // Debounced save to Supabase
+  const handlePlanChange = useCallback(async (campaignName, planData) => {
+    // Update local state immediately (fast feedback)
+    setPlans(prev => ({ ...prev, [campaignName]: planData }))
+
+    if (!session?.user?.id) return
+
+    // Clear = delete the row; otherwise upsert
+    const isEmpty = !planData.budget && !planData.leads && !planData.cpl && !planData.revenue
+    setSavingPlan(campaignName)
+
+    if (isEmpty) {
+      await supabase
+        .from('campaign_plans')
+        .delete()
+        .eq('user_id', session.user.id)
+        .eq('campaign_name', campaignName)
+    } else {
+      await supabase
+        .from('campaign_plans')
+        .upsert({
+          user_id: session.user.id,
+          campaign_name: campaignName,
+          budget:  parseFloat(planData.budget)  || null,
+          leads:   parseFloat(planData.leads)   || null,
+          cpl:     parseFloat(planData.cpl)     || null,
+          revenue: parseFloat(planData.revenue) || null,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id, campaign_name' })
+    }
+    setSavingPlan(null)
+  }, [session])
 
   const sorted = useMemo(() => {
     if (!sort.key) return campaigns
@@ -247,7 +392,16 @@ export default function AnalyticsTable({ campaigns, totals, onHideCampaign }) {
                 </td>
               </tr>
             ) : (
-              sorted.map((camp, i) => <CampaignRow key={i} campaign={camp} onHide={onHideCampaign} />)
+              sorted.map((camp, i) => (
+                <CampaignRow
+                  key={i}
+                  campaign={camp}
+                  onHide={onHideCampaign}
+                  plans={plans}
+                  onPlanChange={handlePlanChange}
+                  isSaving={savingPlan === camp.campaign_name}
+                />
+              ))
             )}
           </tbody>
           {totals && sorted.length > 0 && (

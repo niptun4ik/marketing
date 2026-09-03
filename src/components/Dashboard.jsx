@@ -24,7 +24,7 @@ const DEFAULT_FILTERS = {
   hiddenCampaigns: [],
 }
 
-export default function Dashboard({ metaRows, bitrixRows }) {
+export default function Dashboard({ metaRows, bitrixRows, session }) {
   const [matchKey, setMatchKey] = useState('campaign')  // 'campaign' | 'ad'
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [margin, setMargin] = useState(30)  // маржинальность в %
@@ -150,6 +150,7 @@ export default function Dashboard({ metaRows, bitrixRows }) {
         campaigns={filteredCampaigns} 
         totals={totals} 
         onHideCampaign={(name) => setFilters(f => ({ ...f, hiddenCampaigns: [...(f.hiddenCampaigns || []), name] }))}
+        session={session}
       />
 
       {/* Legend */}

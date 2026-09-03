@@ -225,7 +225,7 @@ export default function App() {
             />
           ) : (
             <ErrorBoundary>
-              <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} />
+              <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} session={session} />
             </ErrorBoundary>
           )}
 
