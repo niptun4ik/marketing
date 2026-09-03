@@ -4,8 +4,11 @@ import Header from './components/Header'
 import FileUploader from './components/FileUploader'
 import MappingModal from './components/MappingModal'
 import Dashboard from './components/Dashboard'
+import Auth from './components/Auth'
+import HistoryModal from './components/HistoryModal'
 import { parseFile, applyMapping, autoDetectMapping } from './hooks/useFileParser'
 import { useLocalStorage, clearLocalStorage } from './hooks/useLocalStorage'
+import { supabase } from './supabaseClient'
 import {
   DEMO_META_ROWS, DEMO_BITRIX_ROWS,
   META_FIELD_ALIASES, BITRIX_FIELD_ALIASES,
@@ -14,19 +17,39 @@ import {
 const LS_KEY = 'mkt-analytics-session'
 
 export default function App() {
+  // ─── Auth Session ────────────────────────────────────────────────────────
+  const [session, setSession] = useState(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      setAuthLoading(false)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   // ─── Dark mode ────────────────────────────────────────────────────────────
   const [darkMode, setDarkMode] = useLocalStorage('mkt-dark', false)
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode)
   }, [darkMode])
 
-  // ─── Session persistence ──────────────────────────────────────────────────
-  const [session, setSession] = useLocalStorage(LS_KEY, null)
+  // ─── Session persistence (Local) ──────────────────────────────────────────
+  const [localSession, setLocalSession] = useLocalStorage(LS_KEY, null)
+
+  // ─── History Modal ────────────────────────────────────────────────────────
+  const [showHistory, setShowHistory] = useState(false)
 
   // ─── Raw parsed rows ──────────────────────────────────────────────────────
-  const [metaRaw, setMetaRaw]       = useState(null)   // { rows, columns }
+  const [metaRaw, setMetaRaw]       = useState(null)   
   const [bitrixRaw, setBitrixRaw]   = useState(null)
-  const [metaFile, setMetaFile]     = useState(null)   // { name, rowCount, colCount }
+  const [metaFile, setMetaFile]     = useState(null)   
   const [bitrixFile, setBitrixFile] = useState(null)
 
   // ─── Loading / error ──────────────────────────────────────────────────────
@@ -36,29 +59,31 @@ export default function App() {
   const [bitrixError,   setBitrixError]   = useState(null)
 
   // ─── Mapping modal ────────────────────────────────────────────────────────
-  const [modal, setModal] = useState(null) // { type: 'meta'|'bitrix', columns, mapping }
+  const [modal, setModal] = useState(null) 
 
   // ─── Mapped rows (ready for dashboard) ───────────────────────────────────
-  const [metaRows,   setMetaRows]   = useState(session?.metaRows   || null)
-  const [bitrixRows, setBitrixRows] = useState(session?.bitrixRows || null)
+  const [metaRows,   setMetaRows]   = useState(localSession?.metaRows   || null)
+  const [bitrixRows, setBitrixRows] = useState(localSession?.bitrixRows || null)
+  const [isDemo, setIsDemo] = useState(localSession?.isDemo || false)
 
-  // ─── Restore file labels from session ────────────────────────────────────
+  // ─── Restore file labels from local session ────────────────────────────────────
   useEffect(() => {
-    if (session?.metaFile)   setMetaFile(session.metaFile)
-    if (session?.bitrixFile) setBitrixFile(session.bitrixFile)
+    if (localSession?.metaFile)   setMetaFile(localSession.metaFile)
+    if (localSession?.bitrixFile) setBitrixFile(localSession.bitrixFile)
   }, [])
 
-  // ─── Persist session on change ────────────────────────────────────────────
+  // ─── Persist local session on change ────────────────────────────────────────────
   useEffect(() => {
     if (metaRows || bitrixRows) {
-      setSession({ metaRows, bitrixRows, metaFile, bitrixFile })
+      setLocalSession({ metaRows, bitrixRows, metaFile, bitrixFile, isDemo })
     }
-  }, [metaRows, bitrixRows, metaFile, bitrixFile])
+  }, [metaRows, bitrixRows, metaFile, bitrixFile, isDemo])
 
   // ─── File handlers ────────────────────────────────────────────────────────
   async function handleMetaFile(file) {
     setMetaLoading(true)
     setMetaError(null)
+    setIsDemo(false)
     try {
       const parsed = await parseFile(file)
       const autoMap = autoDetectMapping(parsed.columns, META_FIELD_ALIASES)
@@ -75,6 +100,7 @@ export default function App() {
   async function handleBitrixFile(file) {
     setBitrixLoading(true)
     setBitrixError(null)
+    setIsDemo(false)
     try {
       const parsed = await parseFile(file)
       const autoMap = autoDetectMapping(parsed.columns, BITRIX_FIELD_ALIASES)
@@ -88,18 +114,56 @@ export default function App() {
     }
   }
 
-  // ─── Confirm mapping ──────────────────────────────────────────────────────
-  function handleMappingConfirm(mapping) {
+  // ─── Confirm mapping & Save to Supabase ──────────────────────────────────────────────────────
+  async function handleMappingConfirm(mapping) {
+    let newMeta = metaRows
+    let newBitrix = bitrixRows
+
     if (modal.type === 'meta') {
-      setMetaRows(applyMapping(metaRaw.rows, mapping))
+      newMeta = applyMapping(metaRaw.rows, mapping)
+      setMetaRows(newMeta)
     } else {
-      setBitrixRows(applyMapping(bitrixRaw.rows, mapping))
+      newBitrix = applyMapping(bitrixRaw.rows, mapping)
+      setBitrixRows(newBitrix)
     }
     setModal(null)
+
+    // Save to Supabase if we have both files mapped and it's not demo data
+    if (newMeta && newBitrix && session?.user?.id) {
+      const file_name = `${metaFile?.name || 'meta'} + ${bitrixFile?.name || 'bitrix'}`
+      const upload_data = {
+        metaRows: newMeta,
+        bitrixRows: newBitrix,
+        metaFile: metaFile || { name: 'meta' },
+        bitrixFile: bitrixFile || { name: 'bitrix' }
+      }
+      
+      const { error } = await supabase.from('user_uploads').insert([
+        {
+          user_id: session.user.id,
+          file_name,
+          upload_data
+        }
+      ])
+
+      if (error) {
+        console.error('Ошибка сохранения отчета в БД:', error)
+      }
+    }
+  }
+
+  // ─── History Loader ────────────────────────────────────────────────────────────
+  function handleLoadHistory(uploadData) {
+    setMetaRows(uploadData.metaRows)
+    setBitrixRows(uploadData.bitrixRows)
+    setMetaFile(uploadData.metaFile)
+    setBitrixFile(uploadData.bitrixFile)
+    setIsDemo(false)
   }
 
   // ─── Demo data ────────────────────────────────────────────────────────────
   function handleLoadDemo() {
+    setIsDemo(true)
     setMetaRows(DEMO_META_ROWS)
     setBitrixRows(DEMO_BITRIX_ROWS)
     setMetaFile({ name: 'demo_meta_ads.xlsx', rowCount: DEMO_META_ROWS.length, colCount: 7 })
@@ -112,8 +176,17 @@ export default function App() {
     setMetaFile(null); setBitrixFile(null)
     setMetaRaw(null);  setBitrixRaw(null)
     setMetaError(null); setBitrixError(null)
+    setIsDemo(false)
     clearLocalStorage(LS_KEY)
-    setSession(null)
+    setLocalSession(null)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-500"></div>
+      </div>
+    )
   }
 
   const showDashboard = metaRows && bitrixRows
@@ -124,36 +197,51 @@ export default function App() {
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onReset={showDashboard ? handleReset : null}
+        session={session}
+        onOpenHistory={() => setShowHistory(true)}
       />
 
-      {!showDashboard ? (
-        <FileUploader
-          metaFile={metaFile}
-          bitrixFile={bitrixFile}
-          metaLoading={metaLoading}
-          bitrixLoading={bitrixLoading}
-          metaError={metaError}
-          bitrixError={bitrixError}
-          onMetaFile={handleMetaFile}
-          onBitrixFile={handleBitrixFile}
-          onClearMeta={() => { setMetaFile(null); setMetaRows(null) }}
-          onClearBitrix={() => { setBitrixFile(null); setBitrixRows(null) }}
-          onLoadDemo={handleLoadDemo}
-        />
+      {!session ? (
+        <Auth />
       ) : (
-        <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} />
-      )}
+        <>
+          {!showDashboard ? (
+            <FileUploader
+              metaFile={metaFile}
+              bitrixFile={bitrixFile}
+              metaLoading={metaLoading}
+              bitrixLoading={bitrixLoading}
+              metaError={metaError}
+              bitrixError={bitrixError}
+              onMetaFile={handleMetaFile}
+              onBitrixFile={handleBitrixFile}
+              onClearMeta={() => { setMetaFile(null); setMetaRows(null) }}
+              onClearBitrix={() => { setBitrixFile(null); setBitrixRows(null) }}
+              onLoadDemo={handleLoadDemo}
+            />
+          ) : (
+            <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} />
+          )}
 
-      {/* Mapping Modal */}
-      {modal && (
-        <MappingModal
-          isOpen={true}
-          type={modal.type}
-          columns={modal.columns}
-          initialMapping={modal.mapping}
-          onConfirm={handleMappingConfirm}
-          onClose={() => setModal(null)}
-        />
+          {/* Mapping Modal */}
+          {modal && (
+            <MappingModal
+              isOpen={true}
+              type={modal.type}
+              columns={modal.columns}
+              initialMapping={modal.mapping}
+              onConfirm={handleMappingConfirm}
+              onClose={() => setModal(null)}
+            />
+          )}
+
+          {/* History Modal */}
+          <HistoryModal
+            isOpen={showHistory}
+            onClose={() => setShowHistory(false)}
+            onLoadHistory={handleLoadHistory}
+          />
+        </>
       )}
     </div>
   )
