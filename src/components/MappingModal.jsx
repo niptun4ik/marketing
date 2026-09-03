@@ -9,7 +9,7 @@ const META_FIELDS = [
   { key: 'spend',         label: 'Затраты (Spend)', required: true },
   { key: 'impressions',   label: 'Показы (Impressions)', required: true },
   { key: 'clicks',        label: 'Клики (Clicks)', required: true },
-  { key: 'leads',         label: 'Лиды (Leads)', required: false },
+  { key: 'leads',         label: 'Лиды / Результат (Meta)', required: false },
 ]
 
 const BITRIX_FIELDS = [

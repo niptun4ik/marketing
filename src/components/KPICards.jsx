@@ -5,7 +5,7 @@ const fmt = (n, opts = {}) => {
   if (n === null || n === undefined || isNaN(n)) return '—'
   const { style, currency, decimals = 0, suffix = '' } = opts
   if (style === 'currency') {
-    return n.toLocaleString('ru-RU', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 })
+    return n.toLocaleString('ru-RU', { style: 'currency', currency: currency || 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   if (style === 'percent') {
     return n.toFixed(decimals) + '%'
@@ -50,12 +50,12 @@ function KPICard({ title, value, subtitle, icon: Icon, trend, color = 'blue', si
 
 export default function KPICards({ totals }) {
   if (!totals) return null
-  const { spend, revenue, roas, cpl, wonDeals, bxLeads, impressions, clicks } = totals
+  const { spend, revenue, roas, cpl, metaCpl, wonDeals, bxLeads, metaLeads, impressions, clicks } = totals
 
   const roasPositive = roas >= 0
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
       <KPICard
         title="Общий бюджет (Spend)"
         value={fmt(spend, { style: 'currency' })}
@@ -79,9 +79,16 @@ export default function KPICards({ totals }) {
         color={roasPositive ? 'green' : 'red'}
       />
       <KPICard
-        title="Средний CPL"
+        title="Цена рез. (Meta)"
+        value={fmt(metaCpl, { style: 'currency' })}
+        subtitle={`${fmt(metaLeads, {})} результатов`}
+        icon={Users}
+        color="orange"
+      />
+      <KPICard
+        title="Средний CPL (BX)"
         value={fmt(cpl, { style: 'currency' })}
-        subtitle={`${bxLeads} лидов BX`}
+        subtitle={`${fmt(bxLeads, {})} лидов BX`}
         icon={Target}
         color="purple"
       />
@@ -90,7 +97,7 @@ export default function KPICards({ totals }) {
         value={fmt(wonDeals, {})}
         subtitle={`из ${fmt(clicks, {})} кликов`}
         icon={Zap}
-        color="orange"
+        color="blue"
       />
     </div>
   )

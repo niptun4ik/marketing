@@ -130,13 +130,14 @@ export function computeCampaignMetrics(totals = {}, bxDeals = []) {
   const ctr      = impressions > 0 ? (clicks / impressions) * 100 : 0
   const cpc      = clicks > 0     ? spend / clicks : 0
   const cpl      = bxLeads > 0   ? spend / bxLeads : 0
+  const metaCpl  = metaLeads > 0 ? spend / metaLeads : 0
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
   const cpo      = wonDeals > 0  ? spend / wonDeals : 0
   const roas     = spend > 0     ? ((revenue - spend) / spend) * 100 : 0
 
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals,
-    revenue, ctr, cpc, cpl, winRate, cpo, roas,
+    revenue, ctr, cpc, cpl, metaCpl, winRate, cpo, roas,
     rowStatus: spend > 0 && (wonDeals === 0 || roas < 0) ? 'red'
              : roas >= 100 ? 'green'
              : 'neutral',
@@ -191,9 +192,9 @@ export function buildCampaignChartData(campaigns = []) {
     return {
       name: rawName.length > 22 ? rawName.slice(0, 20) + '…' : rawName,
       fullName: rawName,
-      spend: Math.round(c?.metrics?.spend || 0),
-      revenue: Math.round(c?.metrics?.revenue || 0),
-      roas: Math.round(c?.metrics?.roas || 0),
+      spend: Number((c?.metrics?.spend || 0).toFixed(2)),
+      revenue: Number((c?.metrics?.revenue || 0).toFixed(2)),
+      roas: Number((c?.metrics?.roas || 0).toFixed(2)),
     }
   })
 }

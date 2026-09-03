@@ -1,5 +1,5 @@
 // components/FiltersBar.jsx
-import { Search, SlidersHorizontal, X } from 'lucide-react'
+import { Search, SlidersHorizontal, X, EyeOff } from 'lucide-react'
 
 const STAGES = ['Новая', 'В работе', 'Успешно', 'Проиграна']
 
@@ -7,9 +7,9 @@ export default function FiltersBar({ filters, onChange }) {
   const update = (key, val) => onChange({ ...filters, [key]: val })
 
   const hasFilters = filters.search || filters.dateFrom || filters.dateTo ||
-    (filters.stages && filters.stages.length < STAGES.length)
+    (filters.stages && filters.stages.length < STAGES.length) || (filters.hiddenCampaigns && filters.hiddenCampaigns.length > 0)
 
-  const reset = () => onChange({ search: '', dateFrom: '', dateTo: '', stages: [...STAGES] })
+  const reset = () => onChange({ search: '', dateFrom: '', dateTo: '', stages: [...STAGES], hiddenCampaigns: [] })
 
   const toggleStage = (stage) => {
     const current = filters.stages || [...STAGES]
@@ -84,6 +84,21 @@ export default function FiltersBar({ filters, onChange }) {
           )
         })}
       </div>
+
+      {/* Hidden Campaigns */}
+      {filters.hiddenCampaigns?.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap ml-2 border-l pl-3 border-gray-200 dark:border-gray-700">
+          <EyeOff size={13} className="text-gray-400 mr-0.5" />
+          <button
+            onClick={() => update('hiddenCampaigns', [])}
+            className="text-xs px-2.5 py-1 rounded-full font-medium border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-900/30 dark:border-amber-900/50 dark:text-amber-400 flex items-center gap-1"
+            title="Очистить список скрытых кампаний"
+          >
+            Скрыто: {filters.hiddenCampaigns.length}
+            <X size={12} />
+          </button>
+        </div>
+      )}
 
       {/* Reset */}
       {hasFilters && (

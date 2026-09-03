@@ -19,6 +19,7 @@ const DEFAULT_FILTERS = {
   dateFrom: '',
   dateTo: '',
   stages: ['Новая', 'В работе', 'Успешно', 'Проиграна'],
+  hiddenCampaigns: [],
 }
 
 export default function Dashboard({ metaRows, bitrixRows }) {
@@ -58,10 +59,16 @@ export default function Dashboard({ metaRows, bitrixRows }) {
 
   // Search filter on campaign level
   const filteredCampaigns = useMemo(() => {
-    if (!filters.search) return campaigns
-    const q = filters.search.toLowerCase()
-    return campaigns.filter((c) => c.campaign_name.toLowerCase().includes(q))
-  }, [campaigns, filters.search])
+    let res = campaigns
+    if (filters.hiddenCampaigns?.length) {
+      res = res.filter((c) => !filters.hiddenCampaigns.includes(c.campaign_name))
+    }
+    if (filters.search) {
+      const q = filters.search.toLowerCase()
+      res = res.filter((c) => c.campaign_name.toLowerCase().includes(q))
+    }
+    return res
+  }, [campaigns, filters.search, filters.hiddenCampaigns])
 
   const totals = useMemo(() => computeTotals(filteredCampaigns), [filteredCampaigns])
 
@@ -120,7 +127,11 @@ export default function Dashboard({ metaRows, bitrixRows }) {
       <DashboardCharts chartData={chartData} funnelData={funnelData} />
 
       {/* Table */}
-      <AnalyticsTable campaigns={filteredCampaigns} totals={totals} />
+      <AnalyticsTable 
+        campaigns={filteredCampaigns} 
+        totals={totals} 
+        onHideCampaign={(name) => setFilters(f => ({ ...f, hiddenCampaigns: [...(f.hiddenCampaigns || []), name] }))}
+      />
 
       {/* Legend */}
       <div className="flex items-center gap-4 text-xs text-gray-400 pb-4">

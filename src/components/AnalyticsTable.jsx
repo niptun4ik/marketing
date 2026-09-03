@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react'
-import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown, EyeOff } from 'lucide-react'
 import { toNum, isWonStage } from '../utils/matchData'
 
 const fmt = (n, { style, dec = 0, fallback = '—' } = {}) => {
   if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return fallback
-  if (style === 'currency') return n.toLocaleString('ru-RU', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+  if (style === 'currency') return n.toLocaleString('ru-RU', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (style === 'percent') return n.toFixed(dec) + '%'
   return n.toLocaleString('ru-RU', { maximumFractionDigits: dec })
 }
@@ -16,9 +16,10 @@ const COLUMNS = [
   { key: 'ctr',         label: 'CTR',        sortable: true },
   { key: 'cpc',         label: 'CPC',        sortable: true },
   { key: 'spend',       label: 'Spend',      sortable: true },
-  { key: 'metaLeads',   label: 'Лиды Meta',  sortable: true },
+  { key: 'metaLeads',   label: 'Рез. (Meta)', sortable: true },
+  { key: 'metaCpl',     label: 'Цена рез.',   sortable: true },
   { key: 'bxLeads',     label: 'Лиды BX',    sortable: true },
-  { key: 'cpl',         label: 'CPL',        sortable: true },
+  { key: 'cpl',         label: 'CPL (BX)',   sortable: true },
   { key: 'wonDeals',    label: 'Продажи',    sortable: true },
   { key: 'winRate',     label: 'Win Rate',   sortable: true },
   { key: 'revenue',     label: 'Выручка',    sortable: true },
@@ -44,6 +45,7 @@ function renderCell(col, metrics, isTotal = false) {
     case 'spend':   return fmt(v, { style: 'currency' })
     case 'revenue': return fmt(v, { style: 'currency' })
     case 'cpl':     return fmt(v, { style: 'currency' })
+    case 'metaCpl': return fmt(v, { style: 'currency' })
     case 'cpc':     return fmt(v, { style: 'currency' })
     case 'cpo':     return fmt(v, { style: 'currency' })
     default:        return '—'
@@ -71,6 +73,7 @@ function AdRow({ ad, bxDeals = [] }) {
       spend, impressions, clicks, metaLeads, bxLeads, wonDeals, revenue,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : NaN,
       cpc: clicks > 0 ? spend / clicks : NaN,
+      metaCpl: metaLeads > 0 ? spend / metaLeads : NaN,
       cpl: bxLeads > 0 ? spend / bxLeads : NaN,
       winRate: bxLeads > 0 ? (wonDeals / bxLeads) * 100 : NaN,
       cpo: wonDeals > 0 ? spend / wonDeals : NaN,
@@ -124,7 +127,7 @@ function AdSetRow({ adset, bxDeals }) {
 }
 
 // Campaign-level row
-function CampaignRow({ campaign }) {
+function CampaignRow({ campaign, onHide }) {
   const [open, setOpen] = useState(false)
   const m = campaign.metrics
 
@@ -132,7 +135,7 @@ function CampaignRow({ campaign }) {
     <>
       <tr
         onClick={() => setOpen((o) => !o)}
-        className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer ${rowBg(m.rowStatus)}`}
+        className={`border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/60 transition-colors cursor-pointer group/row ${rowBg(m.rowStatus)}`}
       >
         <td className="table-td">
           <div className="flex items-center gap-2">
@@ -140,10 +143,19 @@ function CampaignRow({ campaign }) {
               ? <ChevronDown size={14} className="text-gray-400 shrink-0" />
               : <ChevronRight size={14} className="text-gray-400 shrink-0" />
             }
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
-                {campaign.campaign_name}
-              </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                  {campaign.campaign_name}
+                </p>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onHide?.(campaign.campaign_name) }}
+                  className="opacity-0 group-hover/row:opacity-100 p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-all text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                  title="Скрыть кампанию из статистики"
+                >
+                  <EyeOff size={14} />
+                </button>
+              </div>
               {campaign.unmatched && (
                 <span className="text-[10px] text-amber-500 font-medium">Только Bitrix24</span>
               )}
@@ -175,7 +187,7 @@ function TotalsRow({ totals }) {
   )
 }
 
-export default function AnalyticsTable({ campaigns, totals }) {
+export default function AnalyticsTable({ campaigns, totals, onHideCampaign }) {
   const [sort, setSort] = useState({ key: 'spend', dir: 'desc' })
 
   const sorted = useMemo(() => {
@@ -229,7 +241,7 @@ export default function AnalyticsTable({ campaigns, totals }) {
                 </td>
               </tr>
             ) : (
-              sorted.map((camp, i) => <CampaignRow key={i} campaign={camp} />)
+              sorted.map((camp, i) => <CampaignRow key={i} campaign={camp} onHide={onHideCampaign} />)
             )}
           </tbody>
           {totals && sorted.length > 0 && (
