@@ -84,11 +84,11 @@ export function parseFile(file) {
  * Применяет маппинг колонок к массиву строк.
  * mapping = { canonical_field: 'actual_column_name', ... }
  */
-export function applyMapping(rows, mapping) {
-  return rows.map((row) => {
+export function applyMapping(rows = [], mapping = {}) {
+  return (rows || []).map((row) => {
     const mapped = {}
     for (const [canonical, actual] of Object.entries(mapping)) {
-      mapped[canonical] = row[actual] ?? ''
+      mapped[canonical] = row?.[actual] ?? ''
     }
     return mapped
   })
@@ -100,12 +100,18 @@ export function applyMapping(rows, mapping) {
  * @param {object} aliases   - { canonical: [alias1, alias2, ...] }
  * @returns {object} mapping - { canonical: bestMatchColumn }
  */
-export function autoDetectMapping(columns, aliases) {
+export function autoDetectMapping(columns = [], aliases = {}) {
   const mapping = {}
   for (const [canonical, aliasList] of Object.entries(aliases)) {
-    const colNorm = columns.map((c) => ({ original: c, norm: c.toLowerCase().trim() }))
+    const colNorm = (columns || []).map((c) => ({
+      original: String(c ?? ''),
+      norm: String(c ?? '').toLowerCase().trim(),
+    }))
     const match = colNorm.find(({ norm }) =>
-      aliasList.some((a) => norm === a.toLowerCase().trim() || norm.includes(a.toLowerCase().trim()))
+      aliasList.some((a) => {
+        const target = String(a).toLowerCase().trim()
+        return norm === target || norm.includes(target)
+      })
     )
     mapping[canonical] = match?.original ?? ''
   }

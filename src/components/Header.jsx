@@ -30,7 +30,7 @@ export default function Header({ darkMode, onToggleDark, onReset, session, onOpe
           {session && (
             <>
               <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 mr-2">
-                {session.user.email}
+                {session?.user?.email || 'Аккаунт'}
               </span>
               <button
                 onClick={onOpenHistory}
