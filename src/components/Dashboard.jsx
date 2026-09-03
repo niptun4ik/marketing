@@ -15,7 +15,6 @@ import {
   buildFunnelData,
 } from '../utils/matchData'
 import { supabase } from '../supabaseClient'
-import { Link2, Link } from 'lucide-react'
 
 const DEFAULT_FILTERS = {
   search: '',
@@ -125,29 +124,6 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Match key toggle */}
-          <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg">
-            <button
-              onClick={() => setMatchKey('campaign')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                matchKey === 'campaign'
-                  ? 'bg-white dark:bg-zinc-900 shadow-sm text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-              }`}
-            >
-              <Link2 size={11} /> По кампании
-            </button>
-            <button
-              onClick={() => setMatchKey('ad')}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                matchKey === 'ad'
-                  ? 'bg-white dark:bg-zinc-900 shadow-sm text-zinc-900 dark:text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
-              }`}
-            >
-              <Link size={11} /> По объявлению
-            </button>
-          </div>
           <ExportButton campaigns={filteredCampaigns} />
         </div>
       </div>
