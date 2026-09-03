@@ -6,6 +6,7 @@ const META_FIELDS = [
   { key: 'campaign_name', label: 'Название кампании', required: true },
   { key: 'adset_name',    label: 'Группа объявлений', required: false },
   { key: 'ad_name',       label: 'Название объявления', required: false },
+  { key: 'date',          label: 'Дата начала (Date Start)', required: false },
   { key: 'spend',         label: 'Затраты (Spend)', required: true },
   { key: 'impressions',   label: 'Показы (Impressions)', required: true },
   { key: 'clicks',        label: 'Клики (Clicks)', required: true },

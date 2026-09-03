@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx'
 
 const HEADERS = [
   'Кампания', 'Группа объявлений', 'Объявление',
-  'Показы', 'Клики', 'CTR (%)', 'CPC',
+  'Показы', 'CPM', 'Клики', 'CTR (%)', 'CPC',
   'Spend', 'Рез. (Meta)', 'CR (Meta, %)', 'Цена рез.', 'Лиды BX', 'CR (BX, %)', 'CPL (BX)',
   'Выигранные сделки', 'Win Rate (%)', 'Выручка', 'CPO', 'ROAS (%)',
 ]
@@ -17,7 +17,7 @@ function flattenCampaigns(campaigns) {
       const m = camp.metrics
       rows.push([
         camp.campaign_name, '', '',
-        m.impressions, m.clicks, fmt2(m.ctr), fmt2(m.cpc),
+        m.impressions, fmt2(m.cpm), m.clicks, fmt2(m.ctr), fmt2(m.cpc),
         m.spend, m.metaLeads, fmt2(m.metaCr), fmt2(m.metaCpl), m.bxLeads, fmt2(m.bxCr), fmt2(m.cpl),
         m.wonDeals, fmt2(m.winRate), m.revenue, fmt2(m.cpo), fmt2(m.roas),
       ])
@@ -27,7 +27,7 @@ function flattenCampaigns(campaigns) {
           const m = computeAdMetrics(ad, camp.bxDeals)
           rows.push([
             camp.campaign_name, adset.adset_name, ad.ad_name,
-            m.impressions, m.clicks, fmt2(m.ctr), fmt2(m.cpc),
+            m.impressions, fmt2(m.cpm), m.clicks, fmt2(m.ctr), fmt2(m.cpc),
             m.spend, m.metaLeads, fmt2(m.metaCr), fmt2(m.metaCpl), m.bxLeads, fmt2(m.bxCr), fmt2(m.cpl),
             m.wonDeals, fmt2(m.winRate), m.revenue, fmt2(m.cpo), fmt2(m.roas),
           ])
@@ -51,6 +51,7 @@ function computeAdMetrics(ad, bxDeals) {
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals, revenue,
     ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+    cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
     cpc: clicks > 0 ? spend / clicks : 0,
     metaCr: clicks > 0 ? (metaLeads / clicks) * 100 : 0,
     bxCr: clicks > 0 ? (bxLeads / clicks) * 100 : 0,

@@ -1,5 +1,5 @@
 // components/Dashboard.jsx
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import KPICards from './KPICards'
 import FiltersBar from './FiltersBar'
 import DashboardCharts from './DashboardCharts'
@@ -14,6 +14,7 @@ import {
   buildDailyChartData,
   buildFunnelData,
 } from '../utils/matchData'
+import { supabase } from '../supabaseClient'
 import { Link2, Link } from 'lucide-react'
 
 const DEFAULT_FILTERS = {
@@ -25,9 +26,23 @@ const DEFAULT_FILTERS = {
 }
 
 export default function Dashboard({ metaRows, bitrixRows, session }) {
-  const [matchKey, setMatchKey] = useState('campaign')  // 'campaign' | 'ad'
+  const [matchKey, setMatchKey] = useState('campaign')
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
-  const [margin, setMargin] = useState(30)  // маржинальность в %
+  const [margin, setMargin] = useState(30)
+  const [stageOrder, setStageOrder] = useState([])
+
+  // Load funnel config from Supabase
+  useEffect(() => {
+    if (!session?.user?.id) return
+    supabase
+      .from('funnel_config')
+      .select('stage_order')
+      .eq('user_id', session.user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.stage_order?.length) setStageOrder(data.stage_order)
+      })
+  }, [session])
 
   // Filter Bitrix rows by date and stage
   const filteredBitrix = useMemo(() => {
@@ -44,9 +59,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       if (filters.dateFrom && date && date < filters.dateFrom) return false
       if (filters.dateTo   && date && date > filters.dateTo)   return false
       const stage = String(deal?.stage || '').trim()
-      // Фильтруем по стадии, только если пользователь явно выбрал стадии и стадия не пустая
       if (filters.stages?.length && stage && !filters.stages.includes(stage)) {
-        // Если в фильтре только дефолтные стадии, а в файле другие — не отсекаем всё подряд
         const isCustomFile = !bitrixRows.some((d) => ['Новая', 'В работе', 'Успешно', 'Проиграна'].includes(String(d?.stage || '').trim()))
         if (!isCustomFile) return false
       }
@@ -74,7 +87,6 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   }, [campaigns, filters.search, filters.hiddenCampaigns])
 
   const totals = useMemo(() => {
-    // Пересчитываем с учётом маржинальности для ROMI
     const allDeals = filteredCampaigns.flatMap(c => c?.bxDeals || [])
     const aggTotals = filteredCampaigns.reduce(
       (acc, c) => ({
@@ -88,12 +100,17 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
     return computeCampaignMetrics(aggTotals, allDeals, margin / 100)
   }, [filteredCampaigns, margin])
 
+  const allBxDeals = useMemo(() => filteredCampaigns.flatMap(c => c?.bxDeals || []), [filteredCampaigns])
+
   const chartData = useMemo(() => ({
     campaignData: buildCampaignChartData(filteredCampaigns),
     dailyData:    buildDailyChartData(filteredCampaigns),
   }), [filteredCampaigns])
 
-  const funnelData = useMemo(() => buildFunnelData(totals), [totals])
+  const funnelData = useMemo(
+    () => buildFunnelData(totals, allBxDeals, stageOrder),
+    [totals, allBxDeals, stageOrder]
+  )
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in">
@@ -143,7 +160,14 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       <FiltersBar filters={filters} onChange={setFilters} />
 
       {/* Charts */}
-      <DashboardCharts chartData={chartData} funnelData={funnelData} />
+      <DashboardCharts
+        chartData={chartData}
+        funnelData={funnelData}
+        bxDeals={allBxDeals}
+        session={session}
+        stageOrder={stageOrder}
+        onStageOrderChange={setStageOrder}
+      />
 
       {/* Table */}
       <AnalyticsTable 

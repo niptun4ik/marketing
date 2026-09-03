@@ -128,6 +128,7 @@ export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
                                     .reduce((sum, d) => sum + toNum(d?.amount), 0)
 
   const ctr      = impressions > 0 ? (clicks / impressions) * 100 : 0
+  const cpm      = impressions > 0 ? (spend / impressions) * 1000 : 0
   const cpc      = clicks > 0     ? spend / clicks : 0
   const metaCr   = clicks > 0     ? (metaLeads / clicks) * 100 : 0
   const bxCr     = clicks > 0     ? (bxLeads / clicks) * 100 : 0
@@ -136,12 +137,11 @@ export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
   const cpo      = wonDeals > 0  ? spend / wonDeals : 0
   const roas     = spend > 0     ? ((revenue - spend) / spend) * 100 : 0
-  // ROMI учитывает маржинальность: (выручка * маржа - затраты) / затраты * 100
   const romi     = spend > 0     ? ((revenue * Math.min(margin, 1) - spend) / spend) * 100 : 0
 
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals,
-    revenue, ctr, cpc, metaCr, bxCr, cpl, metaCpl, winRate, cpo, roas, romi,
+    revenue, ctr, cpm, cpc, metaCr, bxCr, cpl, metaCpl, winRate, cpo, roas, romi,
     rowStatus: spend > 0 && (wonDeals === 0 || roas < 0) ? 'red'
              : roas >= 100 ? 'green'
              : 'neutral',
@@ -163,30 +163,57 @@ export function computeTotals(campaigns = []) {
   return computeCampaignMetrics(totals, allDeals)
 }
 
-/** Данные для графика по дням */
+/** Данные для графика по дням (из Bitrix + Meta если есть дата) */
 export function buildDailyChartData(campaigns = []) {
   const byDay = new Map()
+
+  const ensureDay = (date) => {
+    if (!byDay.has(date)) byDay.set(date, { date, spend: 0, metaLeads: 0, bxLeads: 0, wonDeals: 0, revenue: 0 })
+    return byDay.get(date)
+  }
+
   for (const camp of campaigns || []) {
+    // Meta spend по дням (если в строках есть поле date)
+    for (const adset of camp?.adsets || []) {
+      for (const ad of adset?.ads || []) {
+        const rawDate = ad?.date
+        if (rawDate) {
+          const date = String(rawDate).slice(0, 10)
+          const day = ensureDay(date)
+          day.spend     += toNum(ad?.spend)
+          day.metaLeads += toNum(ad?.leads)
+        }
+      }
+    }
+
+    // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
       const rawDate = deal?.created_date
-      let date = 'unknown'
-      if (typeof rawDate === 'string') {
-        date = rawDate.split('T')[0]
-      } else if (rawDate instanceof Date) {
-        date = rawDate.toISOString().split('T')[0]
-      } else if (rawDate) {
-        date = String(rawDate).slice(0, 10)
-      }
 
-      if (!byDay.has(date)) byDay.set(date, { date, revenue: 0, deals: 0 })
-      const day = byDay.get(date)
+    // Bitrix сделки по дням
+    for (const deal of camp?.bxDeals || []) {
+      const rawDate = deal?.created_date
+      let date = null
+      if (typeof rawDate === 'string') date = rawDate.split('T')[0]
+      else if (rawDate instanceof Date) date = rawDate.toISOString().split('T')[0]
+      else if (rawDate) date = String(rawDate).slice(0, 10)
+      if (!date) continue
+
+      const day = ensureDay(date)
+      day.bxLeads++
       if (isWonStage(deal?.stage)) {
+        day.wonDeals++
         day.revenue += toNum(deal?.amount)
-        day.deals++
       }
     }
   }
-  return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
+
+  return Array.from(byDay.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => ({
+      ...d,
+      cpl: d.metaLeads > 0 ? +(d.spend / d.metaLeads).toFixed(2) : null,
+    }))
 }
 
 /** Данные для графика расходы/выручка по кампаниям */
@@ -203,12 +230,28 @@ export function buildCampaignChartData(campaigns = []) {
   })
 }
 
-/** Данные воронки конверсии */
-export function buildFunnelData(totals = {}) {
-  return [
-    { name: 'Показы',   value: toNum(totals.impressions), fill: '#38bdf8' },
-    { name: 'Клики',    value: toNum(totals.clicks),      fill: '#818cf8' },
-    { name: 'Лиды',     value: toNum(totals.bxLeads),     fill: '#fb923c' },
-    { name: 'Продажи',  value: toNum(totals.wonDeals),    fill: '#34d399' },
+/** Данные воронки конверсии с кастомными стадиями Bitrix */
+export function buildFunnelData(totals = {}, bxDeals = [], stageOrder = []) {
+  const FUNNEL_COLORS = ['#fb923c', '#facc15', '#a3e635', '#34d399', '#2dd4bf']
+
+  const steps = [
+    { name: 'Показы',      value: toNum(totals.impressions), fill: '#38bdf8' },
+    { name: 'Клики',       value: toNum(totals.clicks),      fill: '#818cf8' },
+    { name: 'Лиды (Meta)', value: toNum(totals.metaLeads),   fill: '#f472b6' },
   ]
+
+  if (stageOrder?.length > 0 && bxDeals?.length > 0) {
+    // Кастомные стадии Bitrix в заданном порядке
+    stageOrder.forEach((stageName, i) => {
+      const count = (bxDeals || []).filter(d => norm(d?.stage) === norm(stageName)).length
+      steps.push({ name: stageName, value: count, fill: FUNNEL_COLORS[i % FUNNEL_COLORS.length], isBxStage: true })
+    })
+  } else {
+    // Фолбэк без настроенной воронки
+    steps.push({ name: 'Лиды BX',  value: toNum(totals.bxLeads),  fill: '#fb923c' })
+    steps.push({ name: 'Продажи',  value: toNum(totals.wonDeals), fill: '#34d399' })
+  }
+
+  return steps
 }
+

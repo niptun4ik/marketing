@@ -13,6 +13,7 @@ const fmt = (n, { style, dec = 0, fallback = '—' } = {}) => {
 const COLUMNS = [
   { key: 'name',        label: 'Кампания / Группа / Объявление', sortable: false, width: 'min-w-[180px] max-w-[260px]' },
   { key: 'impressions', label: 'Показы',     sortable: true },
+  { key: 'cpm',         label: 'CPM',        sortable: true },
   { key: 'clicks',      label: 'Клики',      sortable: true },
   { key: 'ctr',         label: 'CTR',        sortable: true },
   { key: 'cpc',         label: 'CPC',        sortable: true },
@@ -53,6 +54,7 @@ function renderCell(col, metrics, isTotal = false) {
     case 'metaCpl': return fmt(v, { style: 'currency' })
     case 'cpc':     return fmt(v, { style: 'currency' })
     case 'cpo':     return fmt(v, { style: 'currency' })
+    case 'cpm':     return fmt(v, { style: 'currency' })
     default:        return '—'
   }
 }
