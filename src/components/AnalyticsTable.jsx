@@ -1,6 +1,6 @@
-// components/AnalyticsTable.jsx
 import { useState, useMemo } from 'react'
 import { ChevronDown, ChevronRight, ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import { toNum, isWonStage } from '../utils/matchData'
 
 const fmt = (n, { style, dec = 0, fallback = '—' } = {}) => {
   if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return fallback
@@ -57,16 +57,16 @@ function rowBg(status) {
 }
 
 // Ad-level row
-function AdRow({ ad, bxDeals }) {
+function AdRow({ ad, bxDeals = [] }) {
   const m = useMemo(() => {
-    const spend       = Number(ad.spend) || 0
-    const impressions = Number(ad.impressions) || 0
-    const clicks      = Number(ad.clicks) || 0
-    const metaLeads   = Number(ad.leads) || 0
-    const bxLeads     = bxDeals.length
-    const wonDeals    = bxDeals.filter((d) => (d.stage || '').toLowerCase() === 'успешно').length
-    const revenue     = bxDeals.filter((d) => (d.stage || '').toLowerCase() === 'успешно')
-                               .reduce((s, d) => s + (Number(d.amount) || 0), 0)
+    const spend       = toNum(ad?.spend)
+    const impressions = toNum(ad?.impressions)
+    const clicks      = toNum(ad?.clicks)
+    const metaLeads   = toNum(ad?.leads)
+    const bxLeads     = (bxDeals || []).length
+    const wonDeals    = (bxDeals || []).filter((d) => isWonStage(d?.stage)).length
+    const revenue     = (bxDeals || []).filter((d) => isWonStage(d?.stage))
+                               .reduce((s, d) => s + toNum(d?.amount), 0)
     return {
       spend, impressions, clicks, metaLeads, bxLeads, wonDeals, revenue,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : NaN,

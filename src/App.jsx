@@ -6,6 +6,7 @@ import MappingModal from './components/MappingModal'
 import Dashboard from './components/Dashboard'
 import Auth from './components/Auth'
 import HistoryModal from './components/HistoryModal'
+import ErrorBoundary from './components/ErrorBoundary'
 import { parseFile, applyMapping, autoDetectMapping } from './hooks/useFileParser'
 import { useLocalStorage, clearLocalStorage } from './hooks/useLocalStorage'
 import { supabase } from './supabaseClient'
@@ -220,7 +221,9 @@ export default function App() {
               onLoadDemo={handleLoadDemo}
             />
           ) : (
-            <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} />
+            <ErrorBoundary>
+              <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} />
+            </ErrorBoundary>
           )}
 
           {/* Mapping Modal */}

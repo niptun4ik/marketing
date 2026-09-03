@@ -27,12 +27,25 @@ export default function Dashboard({ metaRows, bitrixRows }) {
 
   // Filter Bitrix rows by date and stage
   const filteredBitrix = useMemo(() => {
-    return bitrixRows.filter((deal) => {
-      const date = deal.created_date?.split('T')[0] || ''
-      if (filters.dateFrom && date < filters.dateFrom) return false
-      if (filters.dateTo   && date > filters.dateTo)   return false
-      const stage = (deal.stage || '').trim()
-      if (filters.stages && !filters.stages.includes(stage)) return false
+    return (bitrixRows || []).filter((deal) => {
+      let date = ''
+      if (typeof deal?.created_date === 'string') {
+        date = deal.created_date.split('T')[0]
+      } else if (deal?.created_date instanceof Date) {
+        date = deal.created_date.toISOString().split('T')[0]
+      } else if (deal?.created_date) {
+        date = String(deal.created_date).slice(0, 10)
+      }
+
+      if (filters.dateFrom && date && date < filters.dateFrom) return false
+      if (filters.dateTo   && date && date > filters.dateTo)   return false
+      const stage = String(deal?.stage || '').trim()
+      // Фильтруем по стадии, только если пользователь явно выбрал стадии и стадия не пустая
+      if (filters.stages?.length && stage && !filters.stages.includes(stage)) {
+        // Если в фильтре только дефолтные стадии, а в файле другие — не отсекаем всё подряд
+        const isCustomFile = !bitrixRows.some((d) => ['Новая', 'В работе', 'Успешно', 'Проиграна'].includes(String(d?.stage || '').trim()))
+        if (!isCustomFile) return false
+      }
       return true
     })
   }, [bitrixRows, filters])

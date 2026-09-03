@@ -1,7 +1,25 @@
 // utils/matchData.js
 // Объединение данных Meta Ads и Bitrix24 по ключу кампании
 
-const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
+export const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
+
+// Парсит число из строки Meta Ads: "1 234,56" / "1,234.56" / "1234.5" / 1234 → 1234.56
+export const toNum = (v) => {
+  if (typeof v === 'number') return isNaN(v) ? 0 : v
+  if (!v) return 0
+  const s = String(v).trim()
+    .replace(/\s/g, '')                   // убираем пробелы-разделители тысяч
+    .replace(/,(?=\d{3}(?:[^,]|$))/g, '') // убираем "," как разделитель тысяч (1,234)
+    .replace(',', '.')                    // европейский десятичный разделитель "," → "."
+  const n = parseFloat(s)
+  return isNaN(n) ? 0 : n
+}
+
+// Проверяет, является ли стадия успешной сделкой (поддерживает вариации Bitrix24)
+export const isWonStage = (stage) => {
+  const s = norm(stage)
+  return s === 'успешно' || s.includes('успеш') || s.includes('won') || s.includes('оплач')
+}
 
 /**
  * Матчинг Meta-строки с Bitrix-строками.
@@ -10,47 +28,51 @@ const norm = (s) => String(s ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
  * @param {'campaign'|'ad'} matchKey - по чему матчить
  * @returns {object[]} - объединённые данные по кампаниям
  */
-export function matchAndAggregate(metaRows, bitrixRows, matchKey = 'campaign') {
+export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'campaign') {
   // Группируем Meta по кампании → adset → ad
   const metaMap = new Map()
 
-  for (const row of metaRows) {
-    const campKey = norm(row.campaign_name)
+  for (const row of metaRows || []) {
+    const rawCampName = String(row?.campaign_name || '(без кампании)').trim()
+    const campKey = norm(rawCampName)
+
     if (!metaMap.has(campKey)) {
       metaMap.set(campKey, {
-        campaign_name: row.campaign_name,
+        campaign_name: rawCampName,
         adsets: new Map(),
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
       })
     }
     const camp = metaMap.get(campKey)
-    camp.totals.spend       += Number(row.spend)       || 0
-    camp.totals.impressions += Number(row.impressions) || 0
-    camp.totals.clicks      += Number(row.clicks)      || 0
-    camp.totals.leads       += Number(row.leads)       || 0
+    camp.totals.spend       += toNum(row?.spend)
+    camp.totals.impressions += toNum(row?.impressions)
+    camp.totals.clicks      += toNum(row?.clicks)
+    camp.totals.leads       += toNum(row?.leads)
 
-    const adsetKey = norm(row.adset_name)
+    const rawAdsetName = String(row?.adset_name || '(без группы)').trim()
+    const adsetKey = norm(rawAdsetName)
+
     if (!camp.adsets.has(adsetKey)) {
       camp.adsets.set(adsetKey, {
-        adset_name: row.adset_name,
+        adset_name: rawAdsetName,
         ads: [],
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
       })
     }
     const adset = camp.adsets.get(adsetKey)
     adset.ads.push(row)
-    adset.totals.spend       += Number(row.spend)       || 0
-    adset.totals.impressions += Number(row.impressions) || 0
-    adset.totals.clicks      += Number(row.clicks)      || 0
-    adset.totals.leads       += Number(row.leads)       || 0
+    adset.totals.spend       += toNum(row?.spend)
+    adset.totals.impressions += toNum(row?.impressions)
+    adset.totals.clicks      += toNum(row?.clicks)
+    adset.totals.leads       += toNum(row?.leads)
   }
 
   // Группируем Bitrix по ключу матчинга
   const bitrixMap = new Map()
-  for (const deal of bitrixRows) {
+  for (const deal of bitrixRows || []) {
     const key = matchKey === 'campaign'
-      ? norm(deal.utm_campaign)
-      : norm(deal.utm_content || deal.utm_campaign)
+      ? norm(deal?.utm_campaign)
+      : norm(deal?.utm_content || deal?.utm_campaign)
 
     if (!bitrixMap.has(key)) bitrixMap.set(key, [])
     bitrixMap.get(key).push(deal)
@@ -79,8 +101,9 @@ export function matchAndAggregate(metaRows, bitrixRows, matchKey = 'campaign') {
   // Добавляем Bitrix-сделки без пары в Meta (неопознанные)
   for (const [bxKey, deals] of bitrixMap) {
     if (!metaMap.has(bxKey)) {
+      const campName = deals[0]?.utm_campaign || bxKey || '(без кампании)'
       campaigns.push({
-        campaign_name: deals[0]?.utm_campaign || bxKey || '(без кампании)',
+        campaign_name: String(campName),
         adsets: [],
         bxDeals: deals,
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
@@ -93,14 +116,16 @@ export function matchAndAggregate(metaRows, bitrixRows, matchKey = 'campaign') {
   return campaigns
 }
 
-export function computeCampaignMetrics(totals, bxDeals) {
-  const { spend, impressions, clicks, leads: metaLeads } = totals
+export function computeCampaignMetrics(totals = {}, bxDeals = []) {
+  const spend       = toNum(totals.spend)
+  const impressions = toNum(totals.impressions)
+  const clicks      = toNum(totals.clicks)
+  const metaLeads   = toNum(totals.leads)
 
-  const bxLeads   = bxDeals.length
-  const wonDeals  = bxDeals.filter((d) => norm(d.stage) === 'успешно').length
-  const revenue   = bxDeals
-    .filter((d) => norm(d.stage) === 'успешно')
-    .reduce((sum, d) => sum + (Number(d.amount) || 0), 0)
+  const bxLeads   = (bxDeals || []).length
+  const wonDeals  = (bxDeals || []).filter((d) => isWonStage(d?.stage)).length
+  const revenue   = (bxDeals || []).filter((d) => isWonStage(d?.stage))
+                                    .reduce((sum, d) => sum + toNum(d?.amount), 0)
 
   const ctr      = impressions > 0 ? (clicks / impressions) * 100 : 0
   const cpc      = clicks > 0     ? spend / clicks : 0
@@ -119,14 +144,14 @@ export function computeCampaignMetrics(totals, bxDeals) {
 }
 
 /** Суммарные метрики по всем кампаниям */
-export function computeTotals(campaigns) {
-  const allDeals = campaigns.flatMap((c) => c.bxDeals)
-  const totals = campaigns.reduce(
+export function computeTotals(campaigns = []) {
+  const allDeals = (campaigns || []).flatMap((c) => c?.bxDeals || [])
+  const totals = (campaigns || []).reduce(
     (acc, c) => ({
-      spend:       acc.spend + c.totals.spend,
-      impressions: acc.impressions + c.totals.impressions,
-      clicks:      acc.clicks + c.totals.clicks,
-      leads:       acc.leads + c.totals.leads,
+      spend:       acc.spend + toNum(c?.totals?.spend),
+      impressions: acc.impressions + toNum(c?.totals?.impressions),
+      clicks:      acc.clicks + toNum(c?.totals?.clicks),
+      leads:       acc.leads + toNum(c?.totals?.leads),
     }),
     { spend: 0, impressions: 0, clicks: 0, leads: 0 }
   )
@@ -134,15 +159,24 @@ export function computeTotals(campaigns) {
 }
 
 /** Данные для графика по дням */
-export function buildDailyChartData(campaigns) {
+export function buildDailyChartData(campaigns = []) {
   const byDay = new Map()
-  for (const camp of campaigns) {
-    for (const deal of camp.bxDeals) {
-      const date = deal.created_date?.split('T')[0] || 'unknown'
+  for (const camp of campaigns || []) {
+    for (const deal of camp?.bxDeals || []) {
+      const rawDate = deal?.created_date
+      let date = 'unknown'
+      if (typeof rawDate === 'string') {
+        date = rawDate.split('T')[0]
+      } else if (rawDate instanceof Date) {
+        date = rawDate.toISOString().split('T')[0]
+      } else if (rawDate) {
+        date = String(rawDate).slice(0, 10)
+      }
+
       if (!byDay.has(date)) byDay.set(date, { date, revenue: 0, deals: 0 })
       const day = byDay.get(date)
-      if ((deal.stage || '').toLowerCase() === 'успешно') {
-        day.revenue += Number(deal.amount) || 0
+      if (isWonStage(deal?.stage)) {
+        day.revenue += toNum(deal?.amount)
         day.deals++
       }
     }
@@ -151,22 +185,25 @@ export function buildDailyChartData(campaigns) {
 }
 
 /** Данные для графика расходы/выручка по кампаниям */
-export function buildCampaignChartData(campaigns) {
-  return campaigns.map((c) => ({
-    name: c.campaign_name.length > 22 ? c.campaign_name.slice(0, 20) + '…' : c.campaign_name,
-    fullName: c.campaign_name,
-    spend: Math.round(c.metrics.spend),
-    revenue: Math.round(c.metrics.revenue),
-    roas: Math.round(c.metrics.roas),
-  }))
+export function buildCampaignChartData(campaigns = []) {
+  return (campaigns || []).map((c) => {
+    const rawName = String(c?.campaign_name || '(без названия)')
+    return {
+      name: rawName.length > 22 ? rawName.slice(0, 20) + '…' : rawName,
+      fullName: rawName,
+      spend: Math.round(c?.metrics?.spend || 0),
+      revenue: Math.round(c?.metrics?.revenue || 0),
+      roas: Math.round(c?.metrics?.roas || 0),
+    }
+  })
 }
 
 /** Данные воронки конверсии */
-export function buildFunnelData(totals) {
+export function buildFunnelData(totals = {}) {
   return [
-    { name: 'Показы',   value: totals.impressions, fill: '#38bdf8' },
-    { name: 'Клики',    value: totals.clicks,       fill: '#818cf8' },
-    { name: 'Лиды',     value: totals.bxLeads,      fill: '#fb923c' },
-    { name: 'Продажи',  value: totals.wonDeals,     fill: '#34d399' },
+    { name: 'Показы',   value: toNum(totals.impressions), fill: '#38bdf8' },
+    { name: 'Клики',    value: toNum(totals.clicks),      fill: '#818cf8' },
+    { name: 'Лиды',     value: toNum(totals.bxLeads),     fill: '#fb923c' },
+    { name: 'Продажи',  value: toNum(totals.wonDeals),    fill: '#34d399' },
   ]
 }

@@ -2,13 +2,8 @@ import { useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../supabaseClient'
 import { Mail, Lock, LogIn, UserPlus, AlertTriangle, Bug } from 'lucide-react'
 
-// Диагностика: показываем первые символы URL (не весь ключ — из соображений безопасности)
 const debugUrl = import.meta.env.VITE_SUPABASE_URL
-  ? `${import.meta.env.VITE_SUPABASE_URL.slice(0, 30)}…`
-  : 'НЕ ЗАДАН'
-const debugKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-  ? `${import.meta.env.VITE_SUPABASE_ANON_KEY.slice(0, 12)}…`
-  : 'НЕ ЗАДАН'
+const debugKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
 export default function Auth() {
   const [loading, setLoading] = useState(false)
@@ -30,13 +25,19 @@ export default function Auth() {
         const { error } = await supabase.auth.signInWithPassword({ email, password })
         if (error) throw error
       } else {
-        const { error } = await supabase.auth.signUp({ email, password })
+        // redirectTo гарантирует, что ссылка в письме ведёт на Vercel, а не на localhost
+        const redirectTo = window.location.origin
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: redirectTo },
+        })
         if (error) throw error
-        setMessage('Регистрация успешна! Проверьте email для подтверждения.')
+        setMessage(`Регистрация успешна! Проверьте email для подтверждения. Ссылка в письме откроет: ${redirectTo}`)
       }
     } catch (err) {
       if (err.message === 'Failed to fetch' || err.name === 'TypeError') {
-        setError('Failed to fetch — браузер не смог достучаться до Supabase. Нажмите «Диагностика» ниже.')
+        setError('Нет связи с Supabase. Проверьте VITE_SUPABASE_URL — нажмите «Диагностика» ниже.')
       } else {
         setError(err.message || 'Произошла ошибка при авторизации')
       }
@@ -44,6 +45,16 @@ export default function Auth() {
       setLoading(false)
     }
   }
+
+  const urlDisplay = debugUrl
+    ? `${debugUrl.slice(0, 35)}…`
+    : '❌ НЕ ЗАДАН'
+  const keyDisplay = debugKey
+    ? `${debugKey.trim().slice(0, 18)}… (длина: ${debugKey.trim().length} симв.)`
+    : '❌ НЕ ЗАДАН'
+  const urlOk = debugUrl?.trim().startsWith('https://') && debugUrl?.includes('.supabase.co')
+  const keyOk = debugKey?.trim().length > 20 &&
+    (debugKey.trim().startsWith('eyJ') || debugKey.trim().startsWith('sb_'))
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4 animate-fade-in">
@@ -57,15 +68,13 @@ export default function Auth() {
           </p>
         </div>
 
-        {/* Предупреждение о незаданных переменных */}
         {!isSupabaseConfigured && (
           <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 text-xs flex gap-2 items-start">
             <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
             <div>
-              <strong>Переменные Supabase не вшиты в сборку.</strong>
-              <p className="mt-0.5">
-                Убедитесь, что в Vercel добавлены <code>VITE_SUPABASE_URL</code> и <code>VITE_SUPABASE_ANON_KEY</code>,
-                затем нажмите <strong>Redeploy</strong>.
+              <strong>Supabase не сконфигурирован в этой сборке.</strong>
+              <p className="mt-1">
+                Проверьте переменные в Vercel и сделайте Redeploy.
               </p>
             </div>
           </div>
@@ -129,12 +138,11 @@ export default function Auth() {
           <button
             type="button"
             onClick={() => setIsLogin(!isLogin)}
-            className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300 font-medium transition-colors block w-full"
+            className="text-sm text-brand-500 hover:text-brand-600 dark:text-brand-400 dark:hover:text-brand-300 font-medium transition-colors"
           >
             {isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти'}
           </button>
 
-          {/* Кнопка диагностики */}
           <button
             type="button"
             onClick={() => setShowDebug((v) => !v)}
@@ -144,25 +152,34 @@ export default function Auth() {
           </button>
 
           {showDebug && (
-            <div className="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-left text-xs font-mono space-y-1 border border-gray-200 dark:border-gray-700">
-              <p className="text-gray-500 dark:text-gray-400 font-sans font-semibold mb-2">
-                Переменные в текущей сборке Vercel:
+            <div className="mt-2 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-left text-xs font-mono space-y-1.5 border border-gray-200 dark:border-gray-700">
+              <p className="text-gray-500 dark:text-gray-400 font-sans font-semibold mb-2 text-[11px]">
+                Переменные в этой сборке Vercel:
               </p>
               <p>
-                <span className="text-gray-400">VITE_SUPABASE_URL:</span>{' '}
-                <span className={debugUrl === 'НЕ ЗАДАН' ? 'text-red-500 font-bold' : 'text-green-500'}>
-                  {debugUrl}
+                <span className="text-gray-400">URL:</span>{' '}
+                <span className={urlOk ? 'text-green-500' : 'text-red-500 font-bold'}>
+                  {urlDisplay}
                 </span>
+                {urlOk ? ' ✅' : ' ❌'}
               </p>
               <p>
-                <span className="text-gray-400">VITE_SUPABASE_ANON_KEY:</span>{' '}
-                <span className={debugKey === 'НЕ ЗАДАН' ? 'text-red-500 font-bold' : 'text-green-500'}>
-                  {debugKey}
+                <span className="text-gray-400">KEY:</span>{' '}
+                <span className={keyOk ? 'text-green-500' : 'text-red-500 font-bold'}>
+                  {keyDisplay}
                 </span>
+                {keyOk ? ' ✅' : ' ❌'}
               </p>
-              <p className="mt-2 text-gray-400 font-sans text-[10px] leading-tight">
-                Если оба значения заданы, но ошибка Failed to fetch — проверьте статус проекта в Supabase Dashboard (не на паузе ли).
-              </p>
+              {keyOk && urlOk && (
+                <p className="text-amber-500 text-[10px] font-sans mt-1">
+                  Переменные вшиты корректно. Если ошибка остаётся — проверьте, что проект в Supabase не на паузе.
+                </p>
+              )}
+              {(!urlOk || !keyOk) && (
+                <p className="text-red-400 text-[10px] font-sans mt-1 leading-tight">
+                  Переменные отсутствуют в сборке. Добавьте их в Vercel → Settings → Environment Variables, затем Redeploy.
+                </p>
+              )}
             </div>
           )}
         </div>
