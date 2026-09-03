@@ -6,6 +6,8 @@ import DashboardCharts from './DashboardCharts'
 import AnalyticsTable from './AnalyticsTable'
 import ExportButton from './ExportButton'
 import PlanFactPanel from './PlanFactPanel'
+import DailyReportModal from './DailyReportModal'
+import { FileText } from 'lucide-react'
 import {
   matchAndAggregate,
   computeTotals,
@@ -29,6 +31,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [margin, setMargin] = useState(30)
   const [stageOrder, setStageOrder] = useState([])
+  const [showDailyReport, setShowDailyReport] = useState(false)
 
   // Load funnel config from Supabase
   useEffect(() => {
@@ -124,6 +127,14 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDailyReport(true)}
+            className="btn-secondary flex items-center gap-1.5"
+            title="Сформировать готовый утренний отчет"
+          >
+            <FileText size={13} />
+            <span>Отчет за день</span>
+          </button>
           <ExportButton campaigns={filteredCampaigns} />
         </div>
       </div>
@@ -166,6 +177,16 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
           Spend &gt; 0, Продаж = 0 или убыток
         </div>
       </div>
+
+      {/* Daily Report Modal */}
+      <DailyReportModal
+        isOpen={showDailyReport}
+        onClose={() => setShowDailyReport(false)}
+        metaRows={metaRows}
+        bitrixRows={filteredBitrix}
+        campaigns={filteredCampaigns}
+        totals={totals}
+      />
     </div>
   )
 }
