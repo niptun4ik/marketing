@@ -189,10 +189,6 @@ export function buildDailyChartData(campaigns = []) {
     // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
       const rawDate = deal?.created_date
-
-    // Bitrix сделки по дням
-    for (const deal of camp?.bxDeals || []) {
-      const rawDate = deal?.created_date
       let date = null
       if (typeof rawDate === 'string') date = rawDate.split('T')[0]
       else if (rawDate instanceof Date) date = rawDate.toISOString().split('T')[0]
