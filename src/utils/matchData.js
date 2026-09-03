@@ -129,6 +129,8 @@ export function computeCampaignMetrics(totals = {}, bxDeals = []) {
 
   const ctr      = impressions > 0 ? (clicks / impressions) * 100 : 0
   const cpc      = clicks > 0     ? spend / clicks : 0
+  const metaCr   = clicks > 0     ? (metaLeads / clicks) * 100 : 0
+  const bxCr     = clicks > 0     ? (bxLeads / clicks) * 100 : 0
   const cpl      = bxLeads > 0   ? spend / bxLeads : 0
   const metaCpl  = metaLeads > 0 ? spend / metaLeads : 0
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
@@ -137,7 +139,7 @@ export function computeCampaignMetrics(totals = {}, bxDeals = []) {
 
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals,
-    revenue, ctr, cpc, cpl, metaCpl, winRate, cpo, roas,
+    revenue, ctr, cpc, metaCr, bxCr, cpl, metaCpl, winRate, cpo, roas,
     rowStatus: spend > 0 && (wonDeals === 0 || roas < 0) ? 'red'
              : roas >= 100 ? 'green'
              : 'neutral',

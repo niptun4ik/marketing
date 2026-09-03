@@ -17,8 +17,10 @@ const COLUMNS = [
   { key: 'cpc',         label: 'CPC',        sortable: true },
   { key: 'spend',       label: 'Spend',      sortable: true },
   { key: 'metaLeads',   label: 'Рез. (Meta)', sortable: true },
+  { key: 'metaCr',      label: 'CR (Meta)',   sortable: true },
   { key: 'metaCpl',     label: 'Цена рез.',   sortable: true },
   { key: 'bxLeads',     label: 'Лиды BX',    sortable: true },
+  { key: 'bxCr',        label: 'CR (BX)',    sortable: true },
   { key: 'cpl',         label: 'CPL (BX)',   sortable: true },
   { key: 'wonDeals',    label: 'Продажи',    sortable: true },
   { key: 'winRate',     label: 'Win Rate',   sortable: true },
@@ -36,6 +38,8 @@ function renderCell(col, metrics, isTotal = false) {
     case 'bxLeads':     return fmt(v, {})
     case 'wonDeals':    return fmt(v, {})
     case 'ctr':         return fmt(v, { style: 'percent', dec: 2 })
+    case 'metaCr':      return fmt(v, { style: 'percent', dec: 2 })
+    case 'bxCr':        return fmt(v, { style: 'percent', dec: 2 })
     case 'winRate':     return fmt(v, { style: 'percent', dec: 1 })
     case 'roas':        return (
       <span className={v >= 100 ? 'text-green-500 font-semibold' : v < 0 ? 'text-red-500 font-semibold' : ''}>
@@ -73,6 +77,8 @@ function AdRow({ ad, bxDeals = [] }) {
       spend, impressions, clicks, metaLeads, bxLeads, wonDeals, revenue,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : NaN,
       cpc: clicks > 0 ? spend / clicks : NaN,
+      metaCr: clicks > 0 ? (metaLeads / clicks) * 100 : NaN,
+      bxCr: clicks > 0 ? (bxLeads / clicks) * 100 : NaN,
       metaCpl: metaLeads > 0 ? spend / metaLeads : NaN,
       cpl: bxLeads > 0 ? spend / bxLeads : NaN,
       winRate: bxLeads > 0 ? (wonDeals / bxLeads) * 100 : NaN,

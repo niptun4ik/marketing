@@ -1,8 +1,8 @@
 // components/Header.jsx
-import { BarChart3, Moon, Sun, Trash2, LogOut, Clock } from 'lucide-react'
+import { BarChart3, Moon, Sun, Trash2, LogOut, Clock, Settings } from 'lucide-react'
 import { supabase } from '../supabaseClient'
 
-export default function Header({ darkMode, onToggleDark, onReset, session, onOpenHistory }) {
+export default function Header({ darkMode, onToggleDark, onReset, session, onOpenHistory, onOpenSettings }) {
   const handleLogout = async () => {
     await supabase.auth.signOut()
   }
@@ -32,6 +32,13 @@ export default function Header({ darkMode, onToggleDark, onReset, session, onOpe
               <span className="hidden sm:inline text-xs text-gray-500 dark:text-gray-400 mr-2">
                 {session?.user?.email || 'Аккаунт'}
               </span>
+              <button
+                onClick={onOpenSettings}
+                className="btn-ghost text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"
+                title="Настройки интеграций"
+              >
+                <Settings size={15} />
+              </button>
               <button
                 onClick={onOpenHistory}
                 className="btn-ghost text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-900/20"

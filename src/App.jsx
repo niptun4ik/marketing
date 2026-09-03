@@ -6,6 +6,7 @@ import MappingModal from './components/MappingModal'
 import Dashboard from './components/Dashboard'
 import Auth from './components/Auth'
 import HistoryModal from './components/HistoryModal'
+import SettingsModal from './components/SettingsModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import { parseFile, applyMapping, autoDetectMapping } from './hooks/useFileParser'
 import { useLocalStorage, clearLocalStorage } from './hooks/useLocalStorage'
@@ -44,8 +45,9 @@ export default function App() {
   // ─── Session persistence (Local) ──────────────────────────────────────────
   const [localSession, setLocalSession] = useLocalStorage(LS_KEY, null)
 
-  // ─── History Modal ────────────────────────────────────────────────────────
+  // ─── Modals ────────────────────────────────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   // ─── Raw parsed rows ──────────────────────────────────────────────────────
   const [metaRaw, setMetaRaw]       = useState(null)   
@@ -200,6 +202,7 @@ export default function App() {
         onReset={showDashboard ? handleReset : null}
         session={session}
         onOpenHistory={() => setShowHistory(true)}
+        onOpenSettings={() => setShowSettings(true)}
       />
 
       {!session ? (
@@ -243,6 +246,13 @@ export default function App() {
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
             onLoadHistory={handleLoadHistory}
+          />
+
+          {/* Settings Modal */}
+          <SettingsModal
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            session={session}
           />
         </>
       )}
