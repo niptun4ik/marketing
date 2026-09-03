@@ -1,6 +1,5 @@
 // components/KPICards.jsx
-import { useState } from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, Target, Zap, Percent } from 'lucide-react'
+import { TrendingUp, TrendingDown, Percent } from 'lucide-react'
 
 const fmt = (n, opts = {}) => {
   if (n === null || n === undefined || isNaN(n)) return '—'
@@ -14,38 +13,33 @@ const fmt = (n, opts = {}) => {
   return n.toLocaleString('ru-RU', { maximumFractionDigits: decimals }) + suffix
 }
 
-function KPICard({ title, value, subtitle, icon: Icon, trend, color = 'blue', size = 'md' }) {
-  const colorMap = {
-    blue:   'bg-blue-50   dark:bg-blue-900/20   text-blue-500',
-    green:  'bg-green-50  dark:bg-green-900/20  text-green-500',
-    purple: 'bg-purple-50 dark:bg-purple-900/20 text-purple-500',
-    orange: 'bg-orange-50 dark:bg-orange-900/20 text-orange-500',
-    red:    'bg-red-50    dark:bg-red-900/20    text-red-500',
-    teal:   'bg-teal-50   dark:bg-teal-900/20   text-teal-500',
-  }
-
+function MetricCard({ label, value, subtext, status, badge }) {
   return (
-    <div className="kpi-card flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium text-gray-500 dark:text-gray-400 leading-tight">{title}</p>
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${colorMap[color]}`}>
-          <Icon size={15} />
-        </div>
-      </div>
-      <div>
-        <p className={`font-bold text-gray-900 dark:text-gray-100 leading-none ${size === 'lg' ? 'text-2xl' : 'text-xl'}`}>
-          {value}
-        </p>
-        {subtitle && (
-          <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl p-3.5 flex flex-col justify-between hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+      <div className="flex items-center justify-between gap-1 mb-2">
+        <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400 tracking-tight leading-none">
+          {label}
+        </span>
+        {badge && (
+          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium tracking-tight ${
+            status === 'success' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' :
+            status === 'danger' ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' :
+            'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+          }`}>
+            {badge}
+          </span>
         )}
       </div>
-      {trend !== undefined && (
-        <div className={`flex items-center gap-1 text-xs font-medium ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-          {trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-          {Math.abs(trend).toFixed(1)}%
+      <div>
+        <div className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 leading-none">
+          {value}
         </div>
-      )}
+        {subtext && (
+          <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1.5 tracking-tight">
+            {subtext}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
@@ -58,72 +52,69 @@ export default function KPICards({ totals, margin, onMarginChange }) {
   const romiPositive = romi >= 0
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3">
-        <KPICard
-          title="Общий бюджет (Spend)"
+    <div className="space-y-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+        <MetricCard
+          label="Расход (Spend)"
           value={fmt(spend, { style: 'currency' })}
-          subtitle={`${fmt(impressions, {})} показов`}
-          icon={DollarSign}
-          color="blue"
+          subtext={`${fmt(impressions, {})} показов`}
         />
-        <KPICard
-          title="Выручка (Успешные)"
+        <MetricCard
+          label="Выручка"
           value={fmt(revenue, { style: 'currency' })}
-          subtitle={`${wonDeals} продаж`}
-          icon={ShoppingCart}
-          color="green"
-          size="lg"
+          subtext={`${wonDeals} успешных сделок`}
+          status={wonDeals > 0 ? 'success' : undefined}
         />
-        <KPICard
-          title="ROAS"
+        <MetricCard
+          label="ROAS"
           value={fmt(roas, { style: 'percent', decimals: 1 })}
-          subtitle={roasPositive ? 'Прибыльно' : 'Убыточно'}
-          icon={roasPositive ? TrendingUp : TrendingDown}
-          color={roasPositive ? 'green' : 'red'}
+          badge={roasPositive ? 'В плюс' : 'Минус'}
+          status={roasPositive ? 'success' : 'danger'}
         />
-        <KPICard
-          title="ROMI (с учётом маржи)"
+        <MetricCard
+          label="ROMI (чистая маржа)"
           value={fmt(romi, { style: 'percent', decimals: 1 })}
-          subtitle={romiPositive ? 'Выгодно' : 'Убыток'}
-          icon={romiPositive ? TrendingUp : TrendingDown}
-          color={romiPositive ? 'teal' : 'red'}
+          badge={romiPositive ? 'Прибыль' : 'Убыток'}
+          status={romiPositive ? 'success' : 'danger'}
         />
-        <KPICard
-          title="Цена рез. (Meta)"
+        <MetricCard
+          label="Цена рез. (Meta)"
           value={fmt(metaCpl, { style: 'currency' })}
-          subtitle={`${fmt(metaLeads, {})} результатов`}
-          icon={Users}
-          color="orange"
+          subtext={`${fmt(metaLeads, {})} результатов`}
         />
-        <KPICard
-          title="Средний CPL (BX)"
+        <MetricCard
+          label="CPL (BX)"
           value={fmt(cpl, { style: 'currency' })}
-          subtitle={`${fmt(bxLeads, {})} лидов BX`}
-          icon={Target}
-          color="purple"
+          subtext={`${fmt(bxLeads, {})} лидов в CRM`}
         />
-        <KPICard
-          title="Продаж / Клики"
-          value={fmt(wonDeals, {})}
-          subtitle={`из ${fmt(clicks, {})} кликов`}
-          icon={Zap}
-          color="blue"
+        <MetricCard
+          label="Конверсия в продажу"
+          value={wonDeals > 0 && bxLeads > 0 ? `${((wonDeals / bxLeads) * 100).toFixed(1)}%` : '0%'}
+          subtext={`${wonDeals} из ${bxLeads} лидов`}
         />
       </div>
 
-      {/* Margin input */}
-      <div className="flex items-center gap-3 bg-teal-50 dark:bg-teal-900/20 border border-teal-100 dark:border-teal-900/40 rounded-xl px-4 py-2.5">
-        <Percent size={14} className="text-teal-500 shrink-0" />
-        <p className="text-xs text-teal-700 dark:text-teal-300 font-medium">Маржинальность для расчёта ROMI:</p>
-        <input
-          type="number"
-          min="1" max="100"
-          value={margin}
-          onChange={e => onMarginChange(Math.max(1, Math.min(100, Number(e.target.value))))}
-          className="w-16 text-center text-sm font-semibold border border-teal-200 dark:border-teal-800 rounded-lg py-1 bg-white dark:bg-gray-900 text-teal-700 dark:text-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-400"
-        />
-        <span className="text-xs text-teal-600 dark:text-teal-400">% — ваша чистая маржа с продажи</span>
+      {/* Margin bar — строгая и компактная */}
+      <div className="flex items-center justify-between bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-lg px-3.5 py-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-zinc-600 dark:text-zinc-400">
+            Маржинальность для расчета ROMI:
+          </span>
+          <span className="text-[11px] text-zinc-400 dark:text-zinc-500 hidden sm:inline">
+            (доля чистой прибыли с каждой продажи)
+          </span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="number"
+            min="1"
+            max="100"
+            value={margin}
+            onChange={e => onMarginChange(Math.max(1, Math.min(100, Number(e.target.value))))}
+            className="w-12 text-center text-xs font-semibold py-1 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-md text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-zinc-400"
+          />
+          <span className="text-xs font-medium text-zinc-500">%</span>
+        </div>
       </div>
     </div>
   )

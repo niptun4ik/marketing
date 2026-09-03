@@ -1,6 +1,6 @@
 // components/PlanFactPanel.jsx
 import { useState } from 'react'
-import { Target, ChevronDown, ChevronUp, TrendingUp, TrendingDown } from 'lucide-react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 
 const fmt = (n, style) => {
   if (!n && n !== 0) return '—'
@@ -12,35 +12,30 @@ const fmt = (n, style) => {
 function PlanFactRow({ label, plan, fact, invert = false, style = 'number', suffix = '' }) {
   if (!plan || plan === 0) return null
   const pct = (fact / plan) * 100
-  // invert = true означает что МЕНЬШЕ — лучше (как CPL)
   const isGood = invert ? pct <= 100 : pct >= 100
-  const barColor = isGood ? 'bg-green-500' : pct >= 80 ? 'bg-amber-400' : 'bg-red-500'
+  const barColor = isGood ? 'bg-emerald-500 dark:bg-emerald-400' : pct >= 80 ? 'bg-amber-400' : 'bg-rose-500'
   const barFill = Math.min(pct, 100)
 
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500 dark:text-gray-400">{label}</span>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-400">план: <span className="text-gray-600 dark:text-gray-300 font-medium">{fmt(plan, style)}{suffix}</span></span>
-          <span className={`font-semibold ${isGood ? 'text-green-600 dark:text-green-400' : pct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
+        <span className="text-zinc-500 dark:text-zinc-400 text-[11px] font-medium">{label}</span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-zinc-400 text-[11px]">
+            план: <span className="font-medium text-zinc-600 dark:text-zinc-300">{fmt(plan, style)}{suffix}</span>
+          </span>
+          <span className={`font-semibold text-[11px] ${isGood ? 'text-emerald-600 dark:text-emerald-400' : pct >= 80 ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'}`}>
             факт: {fmt(fact, style)}{suffix}
           </span>
-          {isGood
-            ? <TrendingUp size={12} className="text-green-500" />
-            : <TrendingDown size={12} className="text-red-500" />
-          }
+          <span className="text-[10px] text-zinc-400 font-mono">({pct.toFixed(0)}%)</span>
         </div>
       </div>
-      <div className="w-full bg-gray-100 dark:bg-gray-800 rounded-full h-2 overflow-hidden">
+      <div className="w-full bg-zinc-100 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
         <div
-          className={`h-2 rounded-full transition-all duration-700 ${barColor}`}
+          className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`}
           style={{ width: `${barFill}%` }}
         />
       </div>
-      <p className="text-[10px] text-gray-400 text-right">
-        {pct.toFixed(0)}% от плана
-      </p>
     </div>
   )
 }
@@ -64,30 +59,30 @@ export default function PlanFactPanel({ totals }) {
   const hasAnyPlan = p.budget || p.leads || p.cpl || p.revenue
 
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl overflow-hidden">
       {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/40 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Target size={15} className="text-brand-500" />
-          <span className="text-sm font-semibold text-gray-800 dark:text-gray-100">
-            Контроль KPI (план-факт)
+          <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 dark:bg-zinc-100" />
+          <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200 tracking-tight">
+            Контроль KPI (общий план-факт)
           </span>
           {hasAnyPlan && (
-            <span className="text-[10px] bg-brand-100 dark:bg-brand-900/30 text-brand-600 dark:text-brand-400 px-2 py-0.5 rounded-full font-medium">
-              активно
+            <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 px-1.5 py-0.5 rounded font-medium">
+              активен
             </span>
           )}
         </div>
-        {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
+        {open ? <ChevronUp size={13} className="text-zinc-400" /> : <ChevronDown size={13} className="text-zinc-400" />}
       </button>
 
       {open && (
-        <div className="px-5 pb-5 space-y-5 border-t border-gray-100 dark:border-gray-800 pt-4">
+        <div className="px-4 pb-4 space-y-4 border-t border-zinc-100 dark:border-zinc-800 pt-3">
           {/* Inputs */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
               { key: 'budget',  label: 'Бюджет ($)',       placeholder: '5000' },
               { key: 'leads',   label: 'Цель по лидам',    placeholder: '100'  },
@@ -95,7 +90,7 @@ export default function PlanFactPanel({ totals }) {
               { key: 'revenue', label: 'Цель выручки ($)',  placeholder: '25000'},
             ].map(({ key, label, placeholder }) => (
               <div key={key} className="space-y-1">
-                <label className="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                <label className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
                   {label}
                 </label>
                 <input
@@ -104,7 +99,7 @@ export default function PlanFactPanel({ totals }) {
                   placeholder={placeholder}
                   value={plan[key]}
                   onChange={e => setPlan(p => ({ ...p, [key]: e.target.value }))}
-                  className="input-base text-sm"
+                  className="input-base"
                 />
               </div>
             ))}
@@ -112,7 +107,7 @@ export default function PlanFactPanel({ totals }) {
 
           {/* Progress bars */}
           {hasAnyPlan && totals && (
-            <div className="space-y-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+            <div className="space-y-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
               <PlanFactRow
                 label="Израсходованный бюджет"
                 plan={p.budget} fact={totals.spend}
@@ -138,8 +133,8 @@ export default function PlanFactPanel({ totals }) {
           )}
 
           {!hasAnyPlan && (
-            <p className="text-xs text-gray-400 text-center py-2">
-              Введите плановые значения выше, чтобы увидеть прогресс-бары ↑
+            <p className="text-[11px] text-zinc-400 text-center py-1">
+              Задайте плановые значения выше для сравнения факта с таргетами
             </p>
           )}
         </div>

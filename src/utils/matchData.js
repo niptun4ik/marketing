@@ -167,19 +167,37 @@ export function computeTotals(campaigns = []) {
 export function buildDailyChartData(campaigns = []) {
   const byDay = new Map()
 
+  const parseDateStr = (raw) => {
+    if (!raw) return null
+    if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().split('T')[0]
+    const s = String(raw).trim()
+    // ISO формат YYYY-MM-DD
+    const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+    // Формат DD.MM.YYYY или DD/MM/YYYY
+    const ruMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
+    if (ruMatch) {
+      const [, d, m, y] = ruMatch
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+    return s.slice(0, 10)
+  }
+
   const ensureDay = (date) => {
     if (!byDay.has(date)) byDay.set(date, { date, spend: 0, metaLeads: 0, bxLeads: 0, wonDeals: 0, revenue: 0 })
     return byDay.get(date)
   }
 
   for (const camp of campaigns || []) {
-    // Meta spend по дням (если в строках есть поле date)
+    // Meta spend по дням
     for (const adset of camp?.adsets || []) {
       for (const ad of adset?.ads || []) {
-        const rawDate = ad?.date
-        if (rawDate) {
-          const date = String(rawDate).slice(0, 10)
-          const day = ensureDay(date)
+        const d = parseDateStr(ad?.date)
+        if (d) {
+          const day = ensureDay(d)
           day.spend     += toNum(ad?.spend)
           day.metaLeads += toNum(ad?.leads)
         }
@@ -188,14 +206,10 @@ export function buildDailyChartData(campaigns = []) {
 
     // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
-      const rawDate = deal?.created_date
-      let date = null
-      if (typeof rawDate === 'string') date = rawDate.split('T')[0]
-      else if (rawDate instanceof Date) date = rawDate.toISOString().split('T')[0]
-      else if (rawDate) date = String(rawDate).slice(0, 10)
-      if (!date) continue
+      const d = parseDateStr(deal?.created_date)
+      if (!d) continue
 
-      const day = ensureDay(date)
+      const day = ensureDay(d)
       day.bxLeads++
       if (isWonStage(deal?.stage)) {
         day.wonDeals++
@@ -204,12 +218,29 @@ export function buildDailyChartData(campaigns = []) {
     }
   }
 
-  return Array.from(byDay.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .map(d => ({
+  const allDays = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
+
+  // Если у Meta нет дат, а у Bitrix есть даты — распределим общий spend пропорционально дням Bitrix
+  const hasMetaDates = allDays.some(d => d.spend > 0 || d.metaLeads > 0)
+  if (!hasMetaDates && allDays.length > 0) {
+    const totalCampSpend = (campaigns || []).reduce((sum, c) => sum + toNum(c?.totals?.spend), 0)
+    const totalCampMetaLeads = (campaigns || []).reduce((sum, c) => sum + toNum(c?.totals?.leads), 0)
+    const totalBxLeads = allDays.reduce((sum, d) => sum + d.bxLeads, 0)
+
+    allDays.forEach(d => {
+      const share = totalBxLeads > 0 ? (d.bxLeads / totalBxLeads) : (1 / allDays.length)
+      d.spend = +(totalCampSpend * share).toFixed(2)
+      d.metaLeads = Math.round(totalCampMetaLeads * share)
+    })
+  }
+
+  return allDays.map(d => {
+    const leadsCount = d.metaLeads > 0 ? d.metaLeads : d.bxLeads
+    return {
       ...d,
-      cpl: d.metaLeads > 0 ? +(d.spend / d.metaLeads).toFixed(2) : null,
-    }))
+      cpl: leadsCount > 0 && d.spend > 0 ? +(d.spend / leadsCount).toFixed(2) : 0,
+    }
+  })
 }
 
 /** Данные для графика расходы/выручка по кампаниям */

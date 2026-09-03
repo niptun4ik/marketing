@@ -113,37 +113,39 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   )
 
   return (
-    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-5 animate-fade-in">
+    <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 space-y-4 animate-fade-in">
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">Сводная аналитика</h2>
-          <p className="text-xs text-gray-400">
-            {metaRows.length} строк Meta · {bitrixRows.length} сделок Bitrix24
+          <h1 className="text-base font-semibold text-zinc-900 dark:text-zinc-100 tracking-tight">
+            Сводная аналитика маркетинга
+          </h1>
+          <p className="text-[11px] text-zinc-400 mt-0.5">
+            {metaRows.length} записей рекламных расходов · {bitrixRows.length} сделок в CRM
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Match key toggle */}
-          <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800 p-0.5 rounded-lg">
             <button
               onClick={() => setMatchKey('campaign')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                 matchKey === 'campaign'
-                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-zinc-900 shadow-sm text-zinc-900 dark:text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
               }`}
             >
-              <Link2 size={12} /> По кампании
+              <Link2 size={11} /> По кампании
             </button>
             <button
               onClick={() => setMatchKey('ad')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
                 matchKey === 'ad'
-                  ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-gray-100'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  ? 'bg-white dark:bg-zinc-900 shadow-sm text-zinc-900 dark:text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200'
               }`}
             >
-              <Link size={12} /> По объявлению
+              <Link size={11} /> По объявлению
             </button>
           </div>
           <ExportButton campaigns={filteredCampaigns} />

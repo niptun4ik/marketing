@@ -2,14 +2,14 @@
 // Реалистичные демо-данные для тестирования интерфейса
 
 export const DEMO_META_ROWS = [
-  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'Moscow 25-45', ad_name: 'Creative_v1', spend: 45000, impressions: 180000, clicks: 3600, leads: 72 },
-  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'Moscow 25-45', ad_name: 'Creative_v2', spend: 32000, impressions: 140000, clicks: 2800, leads: 56 },
-  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'SPb 30-50',   ad_name: 'Creative_v1', spend: 18000, impressions: 75000,  clicks: 1500, leads: 30 },
-  { campaign_name: 'Retargeting – Q4',       adset_name: 'Site Visitors', ad_name: 'Offer_A',    spend: 22000, impressions: 95000,  clicks: 2850, leads: 45 },
-  { campaign_name: 'Retargeting – Q4',       adset_name: 'Cart Abandon',  ad_name: 'Offer_B',    spend: 15000, impressions: 62000,  clicks: 1860, leads: 28 },
-  { campaign_name: 'Brand Awareness',        adset_name: 'Russia Wide',   ad_name: 'Video_30s',  spend: 38000, impressions: 520000, clicks: 5200, leads: 0  },
-  { campaign_name: 'Product Launch – Nov',   adset_name: 'LA 28-55',      ad_name: 'Banner_1',   spend: 61000, impressions: 210000, clicks: 4200, leads: 84 },
-  { campaign_name: 'Product Launch – Nov',   adset_name: 'LA 28-55',      ad_name: 'Banner_2',   spend: 29000, impressions: 98000,  clicks: 1960, leads: 39 },
+  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'Moscow 25-45', ad_name: 'Creative_v1', date: '2024-10-15', spend: 45000, impressions: 180000, clicks: 3600, leads: 72 },
+  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'Moscow 25-45', ad_name: 'Creative_v2', date: '2024-10-20', spend: 32000, impressions: 140000, clicks: 2800, leads: 56 },
+  { campaign_name: 'Lead Gen – Autumn 2024', adset_name: 'SPb 30-50',   ad_name: 'Creative_v1', date: '2024-10-25', spend: 18000, impressions: 75000,  clicks: 1500, leads: 30 },
+  { campaign_name: 'Retargeting – Q4',       adset_name: 'Site Visitors', ad_name: 'Offer_A',    date: '2024-11-01', spend: 22000, impressions: 95000,  clicks: 2850, leads: 45 },
+  { campaign_name: 'Retargeting – Q4',       adset_name: 'Cart Abandon',  ad_name: 'Offer_B',    date: '2024-11-05', spend: 15000, impressions: 62000,  clicks: 1860, leads: 28 },
+  { campaign_name: 'Brand Awareness',        adset_name: 'Russia Wide',   ad_name: 'Video_30s',  date: '2024-11-10', spend: 38000, impressions: 520000, clicks: 5200, leads: 0  },
+  { campaign_name: 'Product Launch – Nov',   adset_name: 'LA 28-55',      ad_name: 'Banner_1',   date: '2024-11-15', spend: 61000, impressions: 210000, clicks: 4200, leads: 84 },
+  { campaign_name: 'Product Launch – Nov',   adset_name: 'LA 28-55',      ad_name: 'Banner_2',   date: '2024-11-20', spend: 29000, impressions: 98000,  clicks: 1960, leads: 39 },
 ]
 
 function randomDate(start, end) {
@@ -50,7 +50,7 @@ export const DEMO_BITRIX_ROWS = [
   ...genDeals('Product Launch – Nov', 'Проиграна', 18),
 ]
 
-export const META_COLUMNS = ['campaign_name', 'adset_name', 'ad_name', 'spend', 'impressions', 'clicks', 'leads']
+export const META_COLUMNS = ['campaign_name', 'adset_name', 'ad_name', 'date', 'spend', 'impressions', 'clicks', 'leads']
 export const BITRIX_COLUMNS = ['deal_id', 'created_date', 'utm_source', 'utm_campaign', 'stage', 'amount']
 
 // Список стандартных полей с возможными альтернативными названиями (для автодетекта)
@@ -58,6 +58,7 @@ export const META_FIELD_ALIASES = {
   campaign_name: ['campaign name', 'campaign', 'кампания', 'название кампании', 'campaign_name'],
   adset_name:    ['adset name', 'adset', 'группа объявлений', 'ad set name', 'adset_name'],
   ad_name:       ['ad name', 'ad', 'объявление', 'название объявления', 'ad_name'],
+  date:          ['date', 'дата', 'день', 'day', 'date start', 'дата начала', 'reporting starts'],
   spend:         ['spend', 'затраты', 'расходы', 'cost', 'amount spent', 'сумма расходов'],
   impressions:   ['impressions', 'показы', 'impr'],
   clicks:        ['clicks', 'клики', 'link clicks'],

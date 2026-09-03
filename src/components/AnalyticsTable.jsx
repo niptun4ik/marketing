@@ -60,8 +60,8 @@ function renderCell(col, metrics, isTotal = false) {
 }
 
 function rowBg(status) {
-  if (status === 'green') return 'bg-green-50/60 dark:bg-green-900/10'
-  if (status === 'red')   return 'bg-red-50/60 dark:bg-red-900/10'
+  if (status === 'green') return 'bg-emerald-50/40 dark:bg-emerald-950/15'
+  if (status === 'red')   return 'bg-rose-50/40 dark:bg-rose-950/15'
   return ''
 }
 
@@ -367,10 +367,10 @@ export default function AnalyticsTable({ campaigns, totals, onHideCampaign, sess
   }
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+    <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-700">
+          <thead className="bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-200 dark:border-zinc-800">
             <tr>
               {COLUMNS.map((col) => (
                 <th

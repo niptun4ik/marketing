@@ -1,6 +1,6 @@
 // components/FiltersBar.jsx
 import { useState, useRef, useEffect } from 'react'
-import { Search, SlidersHorizontal, X, EyeOff, Eye } from 'lucide-react'
+import { Search, X, EyeOff, Eye } from 'lucide-react'
 
 const STAGES = ['Новая', 'В работе', 'Успешно', 'Проиграна']
 
@@ -33,122 +33,119 @@ export default function FiltersBar({ filters, onChange }) {
     update('stages', next)
   }
 
-  const stageColors = {
-    'Новая':    'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400',
-    'В работе': 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400',
-    'Успешно':  'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-500',
-    'Проиграна':'bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400',
-  }
-
   return (
-    <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-xl p-4 flex flex-col sm:flex-row gap-3 flex-wrap items-center">
-      {/* Search */}
-      <div className="relative flex-1 min-w-[180px]">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Поиск по кампании…"
-          value={filters.search || ''}
-          onChange={(e) => update('search', e.target.value)}
-          className="input-base pl-8 pr-8"
-        />
-        {filters.search && (
-          <button onClick={() => update('search', '')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-            <X size={13} />
+    <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl p-3 flex flex-col sm:flex-row gap-2.5 flex-wrap items-center justify-between">
+      <div className="flex flex-wrap items-center gap-2 flex-1 w-full sm:w-auto">
+        {/* Search */}
+        <div className="relative min-w-[200px] flex-1 sm:flex-initial">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Фильтр по кампании…"
+            value={filters.search || ''}
+            onChange={(e) => update('search', e.target.value)}
+            className="input-base pl-8 pr-7 w-full"
+          />
+          {filters.search && (
+            <button onClick={() => update('search', '')} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+
+        {/* Date range */}
+        <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/60 p-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60">
+          <input
+            type="date"
+            value={filters.dateFrom || ''}
+            onChange={(e) => update('dateFrom', e.target.value)}
+            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none"
+          />
+          <span className="text-zinc-400 text-xs">—</span>
+          <input
+            type="date"
+            value={filters.dateTo || ''}
+            onChange={(e) => update('dateTo', e.target.value)}
+            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none"
+          />
+        </div>
+      </div>
+
+      {/* Stage filters & Hidden */}
+      <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
+        <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/70 p-0.5 rounded-lg">
+          {STAGES.map((stage) => {
+            const active = (filters.stages || STAGES).includes(stage)
+            return (
+              <button
+                key={stage}
+                onClick={() => toggleStage(stage)}
+                className={`text-[11px] px-2 py-0.5 rounded-md font-medium transition-all ${
+                  active
+                    ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                    : 'text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300'
+                }`}
+              >
+                {stage}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Hidden Campaigns */}
+        {filters.hiddenCampaigns?.length > 0 && (
+          <div className="relative flex items-center" ref={menuRef}>
+            <div className="flex bg-zinc-100 dark:bg-zinc-800 rounded-md overflow-hidden text-xs">
+              <button
+                onClick={() => setShowHiddenMenu(!showHiddenMenu)}
+                className="text-[11px] px-2 py-1 font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors flex items-center gap-1"
+              >
+                <EyeOff size={11} className="text-zinc-400" />
+                Скрыто: {filters.hiddenCampaigns.length}
+              </button>
+              <button
+                onClick={() => update('hiddenCampaigns', [])}
+                className="px-1.5 py-1 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors border-l border-zinc-200 dark:border-zinc-700"
+                title="Показать все"
+              >
+                <X size={11} />
+              </button>
+            </div>
+
+            {showHiddenMenu && (
+              <div className="absolute top-full right-0 mt-1.5 w-64 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-lg overflow-hidden py-1 z-50">
+                <div className="px-3 py-1.5 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800">
+                  Скрытые кампании
+                </div>
+                <div className="max-h-56 overflow-y-auto">
+                  {filters.hiddenCampaigns.map((name) => (
+                    <div key={name} className="flex items-center justify-between px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 group">
+                      <span className="text-xs text-zinc-700 dark:text-zinc-300 truncate pr-2">{name}</span>
+                      <button
+                        onClick={() => update('hiddenCampaigns', filters.hiddenCampaigns.filter(c => c !== name))}
+                        className="text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 p-1"
+                        title="Вернуть в статистику"
+                      >
+                        <Eye size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Reset */}
+        {hasFilters && (
+          <button
+            onClick={reset}
+            className="text-[11px] text-zinc-400 hover:text-rose-600 transition-colors px-1.5 py-1"
+          >
+            Сброс
           </button>
         )}
       </div>
-
-      {/* Date range */}
-      <div className="flex items-center gap-2">
-        <input
-          type="date"
-          value={filters.dateFrom || ''}
-          onChange={(e) => update('dateFrom', e.target.value)}
-          className="input-base w-auto text-xs"
-        />
-        <span className="text-gray-400 text-xs">—</span>
-        <input
-          type="date"
-          value={filters.dateTo || ''}
-          onChange={(e) => update('dateTo', e.target.value)}
-          className="input-base w-auto text-xs"
-        />
-      </div>
-
-      {/* Stage filters */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <SlidersHorizontal size={13} className="text-gray-400 mr-0.5" />
-        {STAGES.map((stage) => {
-          const active = (filters.stages || STAGES).includes(stage)
-          return (
-            <button
-              key={stage}
-              onClick={() => toggleStage(stage)}
-              className={`
-                text-xs px-2.5 py-1 rounded-full font-medium border transition-all duration-150
-                ${active
-                  ? `${stageColors[stage]} border-current opacity-100`
-                  : 'bg-transparent border-gray-200 dark:border-gray-700 text-gray-400 opacity-50'
-                }
-              `}
-            >
-              {stage}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Hidden Campaigns */}
-      {filters.hiddenCampaigns?.length > 0 && (
-        <div className="relative flex items-center gap-1.5 ml-2 border-l pl-3 border-gray-200 dark:border-gray-700 z-40" ref={menuRef}>
-          <EyeOff size={13} className="text-gray-400 mr-0.5" />
-          <div className="flex bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-900/50 rounded-full overflow-hidden transition-shadow shadow-sm hover:shadow">
-            <button
-              onClick={() => setShowHiddenMenu(!showHiddenMenu)}
-              className="text-xs px-2.5 py-1 font-medium text-amber-700 hover:bg-amber-100 transition-colors dark:text-amber-400 flex items-center gap-1"
-            >
-              Скрыто: {filters.hiddenCampaigns.length}
-            </button>
-            <button
-              onClick={() => update('hiddenCampaigns', [])}
-              className="px-1.5 py-1 text-amber-600 hover:bg-amber-200 dark:text-amber-500 dark:hover:bg-amber-800 transition-colors border-l border-amber-200 dark:border-amber-900/50"
-              title="Показать все (Сбросить)"
-            >
-              <X size={12} />
-            </button>
-          </div>
-          
-          {showHiddenMenu && (
-            <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-lg overflow-hidden animate-fade-in py-1">
-              <div className="px-3 py-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
-                Скрытые кампании
-              </div>
-              <div className="max-h-60 overflow-y-auto custom-scrollbar">
-                {filters.hiddenCampaigns.map((name) => (
-                  <div key={name} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 group border-b border-gray-50 dark:border-gray-800/50 last:border-0">
-                    <span className="text-xs text-gray-700 dark:text-gray-200 truncate pr-2">{name}</span>
-                    <button
-                      onClick={() => update('hiddenCampaigns', filters.hiddenCampaigns.filter(c => c !== name))}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 text-gray-400 hover:text-brand-500 transition-all rounded hover:bg-white dark:hover:bg-gray-600 shadow-sm"
-                      title="Вернуть в статистику"
-                    >
-                      <Eye size={13} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Reset */}
-      {hasFilters && (
-        <button onClick={reset} className="btn-ghost text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20">
-          <X size={13} /> Сбросить
-        </button>
-      )}
     </div>
   )
 }
