@@ -5,7 +5,7 @@ const fmt = (n, opts = {}) => {
   if (n === null || n === undefined || isNaN(n)) return '—'
   const { style, currency, decimals = 0, suffix = '' } = opts
   if (style === 'currency') {
-    return n.toLocaleString('ru-RU', { style: 'currency', currency: currency || 'RUB', maximumFractionDigits: 0 })
+    return n.toLocaleString('ru-RU', { style: 'currency', currency: currency || 'USD', maximumFractionDigits: 0 })
   }
   if (style === 'percent') {
     return n.toFixed(decimals) + '%'

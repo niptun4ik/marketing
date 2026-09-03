@@ -4,7 +4,7 @@ import { toNum, isWonStage } from '../utils/matchData'
 
 const fmt = (n, { style, dec = 0, fallback = '—' } = {}) => {
   if (n === null || n === undefined || isNaN(n) || !isFinite(n)) return fallback
-  if (style === 'currency') return n.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 })
+  if (style === 'currency') return n.toLocaleString('ru-RU', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
   if (style === 'percent') return n.toFixed(dec) + '%'
   return n.toLocaleString('ru-RU', { maximumFractionDigits: dec })
 }

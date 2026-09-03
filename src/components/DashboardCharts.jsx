@@ -27,7 +27,7 @@ const CustomTooltipBar = ({ active, payload, label }) => {
           <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
           <span className="text-gray-600 dark:text-gray-400">{p.name}:</span>
           <span className="font-medium text-gray-800 dark:text-gray-200">
-            {p.value.toLocaleString('ru-RU')} ₽
+            {p.value.toLocaleString('ru-RU')} $
           </span>
         </div>
       ))}
