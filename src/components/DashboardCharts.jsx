@@ -1,6 +1,5 @@
-// components/DashboardCharts.jsx
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  BarChart, Bar, LineChart, Line, ComposedChart, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts'
 import { useState } from 'react'
@@ -14,6 +13,7 @@ const COLORS = {
   metaLeads: '#3b82f6', // blue-500
   bxLeads:   '#6366f1', // indigo-500
   cpl:       '#f59e0b', // amber-500
+  clicks:    '#0284c7', // sky-600
 }
 
 const MONTHS_RU_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
@@ -83,7 +83,7 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
   const hasMetaSummary = !day.hasDailyMetaBreakdown && day.totalMetaSpend > 0
 
   return (
-    <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-3 text-xs min-w-[250px] space-y-2 pointer-events-none select-none">
+    <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-3 text-xs min-w-[260px] space-y-2 pointer-events-none select-none">
       <div className="border-b border-zinc-100 dark:border-zinc-800 pb-1.5 flex items-center justify-between gap-2">
         <span className="font-semibold text-zinc-900 dark:text-zinc-100">{dateFormatted}</span>
         {isBoth ? (
@@ -103,10 +103,10 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
 
       <div className="space-y-1.5 text-[11px]">
         {/* Расход Meta */}
-        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'spend' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${(activeMetric === 'spend' || activeMetric === 'combined') ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
           <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.spend }} />
-            Расход Meta {day.isDistributed ? '(день)*' : 'за день'}:
+            Расход Meta {day.isDistributed ? '(распред.)*' : 'за день'}:
           </span>
           <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
             {day.spend > 0 ? `$${Number(day.spend).toFixed(2)}` : '$0.00'}
@@ -123,37 +123,36 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
           </div>
         )}
 
-        {/* Заявки Meta */}
-        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'metaLeads' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
-          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.metaLeads }} />
-            Заявки (Meta):
-          </span>
-          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
-            {Number(day.metaLeads || 0).toLocaleString('ru-RU')}
-          </span>
-        </div>
-
         {/* Лиды CRM */}
-        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'bxLeads' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
-          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${(activeMetric === 'bxLeads' || activeMetric === 'combined') ? 'bg-indigo-50/70 dark:bg-indigo-950/30 font-medium' : ''}`}>
+          <span className="text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.bxLeads }} />
-            Лиды Bitrix (CRM):
+            Лиды Bitrix24 (CRM):
           </span>
-          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
+          <span className="font-bold font-mono text-indigo-600 dark:text-indigo-400">
             {Number(day.bxLeads || 0).toLocaleString('ru-RU')}
           </span>
         </div>
 
-        {/* Оплаты CRM */}
-        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'wonDeals' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+        {/* Заявки Meta */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'metaLeads' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
           <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.revenue }} />
-            Оплаты (продажи):
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.metaLeads }} />
+            Заявки Meta:
           </span>
           <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
-            {day.wonDeals || 0}
-            {day.revenue > 0 ? ` (${Number(day.revenue).toLocaleString('ru-RU')} ₸)` : ''}
+            {day.hasDailyMetaBreakdown ? Number(day.metaLeads || 0) : `${day.totalMetaLeads || 0} (за период)`}
+          </span>
+        </div>
+
+        {/* Оплаты и Выручка CRM */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${(activeMetric === 'wonDeals' || activeMetric === 'revenue' || activeMetric === 'combined') ? 'bg-emerald-50/70 dark:bg-emerald-950/30 font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.revenue }} />
+            Выручка / Оплаты:
+          </span>
+          <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
+            {day.wonDeals || 0} шт. {day.revenue > 0 ? `(${Number(day.revenue).toLocaleString('ru-RU')} ₸)` : ''}
           </span>
         </div>
 
@@ -171,17 +170,7 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
         {/* Сноска о распределении */}
         {day.isDistributed && (
           <div className="pt-1 text-[9px] text-zinc-400 italic">
-            * Выгрузка Meta за период: расход распределён равномерно по дням активности кампании.
-          </div>
-        )}
-
-        {/* Если Meta выгружена за период, показываем общие данные кампании */}
-        {hasMetaSummary && !day.isDistributed && (
-          <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
-            <div className="flex justify-between items-center">
-              <span>Кампания Meta (общий):</span>
-              <span className="font-mono text-zinc-600 dark:text-zinc-300 font-medium">${day.totalMetaSpend} ({day.totalMetaLeads} лид.)</span>
-            </div>
+            * Отчёт Meta выгружен за период: расход распределён равномерно по активным дням кампании.
           </div>
         )}
       </div>
@@ -212,17 +201,18 @@ function SpendRevenueChart({ data }) {
 
 // --- График по дням ---
 const DAILY_METRICS = [
-  { key: 'spend',     label: 'Расход ($)',     color: COLORS.spend,     type: 'bar'  },
-  { key: 'metaLeads', label: 'Заявки (Meta)',  color: COLORS.metaLeads, type: 'line' },
-  { key: 'bxLeads',   label: 'Лиды CRM',       color: COLORS.bxLeads,   type: 'line' },
-  { key: 'wonDeals',  label: 'Оплаты (CRM)',   color: COLORS.revenue,   type: 'bar'  },
-  { key: 'cpl',       label: 'CPL ($)',        color: COLORS.cpl,       type: 'line' },
+  { key: 'combined',  label: '⚡ Сводный (Расход + Лиды)', color: '#8b5cf6', type: 'combined' },
+  { key: 'spend',     label: 'Расход ($)',                 color: COLORS.spend,     type: 'bar'  },
+  { key: 'bxLeads',   label: 'Лиды CRM',                   color: COLORS.bxLeads,   type: 'line' },
+  { key: 'revenue',   label: 'Выручка (₸)',               color: COLORS.revenue,   type: 'bar'  },
+  { key: 'metaLeads', label: 'Заявки (Meta)',              color: COLORS.metaLeads, type: 'line' },
+  { key: 'wonDeals',  label: 'Оплаты (CRM)',               color: '#059669',        type: 'bar'  },
+  { key: 'cpl',       label: 'CPL ($)',                    color: COLORS.cpl,       type: 'line' },
+  { key: 'clicks',    label: 'Клики',                      color: COLORS.clicks,    type: 'bar'  },
 ]
 
 function DailyChart({ dailyData }) {
-  const hasAnySpend = (dailyData || []).some(d => d.spend > 0)
-  const defaultMetric = hasAnySpend ? 'spend' : 'bxLeads'
-  const [metric, setMetric] = useState(defaultMetric)
+  const [metric, setMetric] = useState('combined')
 
   if (!dailyData?.length) return (
     <div className="flex items-center justify-center h-48 text-zinc-400 text-xs">
@@ -230,14 +220,71 @@ function DailyChart({ dailyData }) {
     </div>
   )
 
+  const metaSummary = dailyData[0] || {}
+  const totalMetaSpend = metaSummary.totalMetaSpend || 0
+  const totalBxLeads = metaSummary.totalBxLeads || 0
+  const totalRevenue = metaSummary.totalRevenue || 0
+  const totalMetaLeads = metaSummary.totalMetaLeads || 0
+  const overallCpl = totalBxLeads > 0 && totalMetaSpend > 0 ? (totalMetaSpend / totalBxLeads).toFixed(2) : null
+  const hasAnySpend = (dailyData || []).some(d => d.spend > 0)
+  const hasAnyRevenue = (dailyData || []).some(d => d.revenue > 0)
+  const hasAnyWon = (dailyData || []).some(d => d.wonDeals > 0)
+  const hasAnyCpl = (dailyData || []).some(d => d.cpl != null)
   const m = DAILY_METRICS.find(d => d.key === metric)
-  const hasAnyCpl = dailyData.some(d => d.cpl != null)
-  const hasCrmOnlyDays = dailyData.some(d => d.spend === 0 && d.bxLeads > 0)
-  const totalMetaSpend = dailyData[0]?.totalMetaSpend || 0
 
   return (
     <div>
-      <div className="flex flex-wrap gap-1 mb-2">
+      {/* Сводный KPI-стрип по дням */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+        <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60">
+          <span className="text-[10px] text-zinc-400 block font-medium">Расход рекламы:</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-xs font-bold font-mono text-zinc-900 dark:text-zinc-100">${totalMetaSpend}</span>
+            {metaSummary?.isAnyDistributed && (
+              <span className="text-[9px] text-zinc-400 font-normal">(${metaSummary?.avgSpendPerDay}/д)</span>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60">
+          <span className="text-[10px] text-zinc-400 block font-medium">Лиды в CRM:</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-xs font-bold font-mono text-indigo-600 dark:text-indigo-400">{totalBxLeads}</span>
+            <span className="text-[9px] text-zinc-400 font-normal">сделок</span>
+          </div>
+        </div>
+
+        <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60">
+          <span className="text-[10px] text-zinc-400 block font-medium">Выручка (CRM):</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              {totalRevenue.toLocaleString('ru-RU')} ₸
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60">
+          <span className="text-[10px] text-zinc-400 block font-medium">Средний CPL:</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-xs font-bold font-mono text-amber-600 dark:text-amber-400">
+              {overallCpl ? `$${overallCpl}` : '—'}
+            </span>
+            <span className="text-[9px] text-zinc-400 font-normal">/ сделку</span>
+          </div>
+        </div>
+
+        <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60 col-span-2 sm:col-span-1">
+          <span className="text-[10px] text-zinc-400 block font-medium">Пик активности:</span>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className="text-xs font-bold font-mono text-zinc-800 dark:text-zinc-200">
+              {metaSummary?.peakDay ? `${formatRuTick(metaSummary.peakDay.date)} (${metaSummary.peakDay.leads} л.)` : '—'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Кнопки метрик */}
+      <div className="flex flex-wrap gap-1 mb-3">
         {DAILY_METRICS.map(d => (
           <button
             key={d.key}
@@ -253,26 +300,67 @@ function DailyChart({ dailyData }) {
         ))}
       </div>
 
+      {/* График */}
       {metric === 'spend' && !hasAnySpend ? (
         <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 space-y-2">
           <p className="font-semibold text-zinc-800 dark:text-zinc-200 text-xs">В выгрузке Meta Ads нет посуточной разбивки расходов</p>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-md">
-            Рекламные расходы экспортированы общей суммой за весь период ({totalMetaSpend > 0 ? `$${totalMetaSpend.toFixed(2)}` : 'кампании'}). Для анализа динамики по дням рекомендуем смотреть метрику «Лиды CRM» или «Оплаты (CRM)».
+            Рекламные расходы экспортированы общей суммой за весь период ({totalMetaSpend > 0 ? `$${totalMetaSpend.toFixed(2)}` : 'кампании'}). Для анализа динамики по дням рекомендуем смотреть метрику «Лиды CRM» или переключиться на «Сводный».
           </p>
           <button
             onClick={() => setMetric('bxLeads')}
             className="text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-3 py-1 rounded-md hover:opacity-90 transition-opacity"
           >
-            Показать динамику лидов CRM
+            Показать динамику лидов CRM ({totalBxLeads})
           </button>
+        </div>
+      ) : metric === 'metaLeads' && !metaSummary?.hasDailyMetaBreakdown ? (
+        <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 space-y-2">
+          <p className="font-semibold text-zinc-800 dark:text-zinc-200 text-xs">В выгрузке Meta Ads нет посуточной разбивки заявок</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-md">
+            Отчет Meta экспортирован общей строкой за период ({totalMetaSpend > 0 ? `$${totalMetaSpend.toFixed(2)}` : ''}, {totalMetaLeads} заявок). В Ads Manager не была выбрана опция «Разбивка по дням».
+            Фактические даты каждого лида с точным временем зафиксированы в Bitrix24 (<strong>{totalBxLeads} лидов</strong>).
+          </p>
+          <button
+            onClick={() => setMetric('bxLeads')}
+            className="text-[11px] font-medium bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 transition-colors shadow-sm"
+          >
+            Показать фактическую динамику лидов из CRM ({totalBxLeads})
+          </button>
+        </div>
+      ) : metric === 'revenue' && !hasAnyRevenue ? (
+        <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800">
+          <p className="font-medium text-zinc-700 dark:text-zinc-300 mb-1">Нет оплаченных сделок за выбранный период</p>
+          <p className="text-[11px] text-zinc-400 max-w-sm">
+            В выгрузке Bitrix24 нет сделок на стадии «Успешно» с положительной суммой за эти даты.
+          </p>
         </div>
       ) : metric === 'cpl' && !hasAnyCpl ? (
         <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800">
           <p className="font-medium text-zinc-600 dark:text-zinc-300 mb-1">Нет посуточных данных по CPL</p>
           <p className="text-[11px] text-zinc-400 max-w-sm">
-            В выгрузке Meta Ads расходы указаны за общий период без разбивки по дням. Посуточный CPL рассчитывается только для дней с зафиксированным расходом.
+            Посуточный CPL рассчитывается для дней, где одновременно зафиксированы расходы рекламы и заявки.
           </p>
         </div>
+      ) : metric === 'combined' ? (
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={dailyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
+            <XAxis dataKey="date" tickFormatter={formatRuTick} tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="spend" orientation="left" tickFormatter={v => `$${fmtK(v)}`} tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} width={42} />
+            <YAxis yAxisId="leads" orientation="right" tickFormatter={v => fmtK(v)} tick={{ fontSize: 9, fill: '#6366f1' }} axisLine={false} tickLine={false} width={30} />
+            <Tooltip content={<DailyTooltip activeMetric={metric} />} allowEscapeViewBox={{ x: true, y: true }} wrapperStyle={{ zIndex: 100, outline: 'none' }} />
+            <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
+            <Bar yAxisId="spend" dataKey="spend" name="Расход ($)" fill={COLORS.spend} radius={[3,3,0,0]} maxBarSize={20} />
+            <Line yAxisId="leads" type="monotone" dataKey="bxLeads" name="Лиды CRM" stroke={COLORS.bxLeads} strokeWidth={2} dot={{ r: 2.5, fill: COLORS.bxLeads }} activeDot={{ r: 4 }} />
+            {hasAnyWon && (
+              <Line yAxisId="leads" type="monotone" dataKey="wonDeals" name="Оплаты (CRM)" stroke={COLORS.revenue} strokeWidth={2} dot={{ r: 3, fill: COLORS.revenue }} activeDot={{ r: 4 }} />
+            )}
+            {metaSummary?.hasDailyMetaBreakdown && (
+              <Line yAxisId="leads" type="monotone" dataKey="metaLeads" name="Заявки Meta" stroke={COLORS.metaLeads} strokeWidth={1.5} strokeDasharray="3 3" dot={{ r: 2 }} />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
       ) : (
         <ResponsiveContainer width="100%" height={210}>
           {m?.type === 'bar' ? (
@@ -280,11 +368,11 @@ function DailyChart({ dailyData }) {
               <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
               <XAxis dataKey="date" tickFormatter={formatRuTick} tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
               <YAxis
-                tickFormatter={v => m.key === 'spend' ? `$${fmtK(v)}` : fmtK(v)}
+                tickFormatter={v => m.key === 'spend' ? `$${fmtK(v)}` : m.key === 'revenue' ? `${fmtK(v)}₸` : fmtK(v)}
                 tick={{ fontSize: 9, fill: '#71717a' }}
                 axisLine={false}
                 tickLine={false}
-                width={45}
+                width={m.key === 'revenue' ? 55 : 45}
               />
               <Tooltip content={<DailyTooltip activeMetric={metric} />} allowEscapeViewBox={{ x: true, y: true }} wrapperStyle={{ zIndex: 100, pointerEvents: 'none', outline: 'none' }} />
               <Bar dataKey={m.key} name={m.label} fill={m.color} radius={[3,3,0,0]} maxBarSize={24} />
@@ -320,13 +408,13 @@ function DailyChart({ dailyData }) {
       <div className="mt-2.5 flex items-start gap-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/60 dark:border-zinc-800/80 text-[11px] text-zinc-500 dark:text-zinc-400">
         <Info size={13} className="shrink-0 mt-0.5 text-zinc-400" />
         <span>
-          {dailyData[0]?.isAnyDistributed ? (
+          {metaSummary?.isAnyDistributed ? (
             <>
-              <strong>Логика распределения:</strong> в выгрузке Meta Ads расходы указаны общим итогом за период. Система рассчитала среднесуточный расход по активным дням кампании, сопоставив его с реальными датами сделок CRM для расчёта честного CPL.
+              <strong>Логика данных:</strong> в выгрузке Meta Ads расходы указаны общим итогом за период ({metaSummary.totalMetaSpend > 0 ? `$${metaSummary.totalMetaSpend}` : ''}, {metaSummary.totalMetaLeads} заявок). Фактические даты поступления каждого лида взяты из CRM Bitrix24 ({metaSummary.totalBxLeads} сделок). Среднесуточный ориентир расхода рассчитан по активным дням кампании (${metaSummary.avgSpendPerDay}/день).
             </>
           ) : (
             <>
-              <strong>Посуточная аналитика:</strong> график отображает фактический расход рекламы и количество сделок в CRM за каждый календарный день.
+              <strong>Посуточная аналитика:</strong> отображает точный фактический расход рекламы и количество созданных сделок в CRM за каждый календарный день.
             </>
           )}
         </span>

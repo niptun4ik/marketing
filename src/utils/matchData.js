@@ -477,11 +477,19 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
 
   let totalMetaSpend = 0
   let totalMetaLeads = 0
+  let totalMetaClicks = 0
+  let totalMetaImpressions = 0
+  let totalBxLeads = 0
+  let totalWonDeals = 0
+  let totalRevenue = 0
   let isAnyDistributed = false
+  let realDailyMetaCount = 0
 
   for (const camp of campaigns || []) {
     totalMetaSpend += toNum(camp?.totals?.spend)
     totalMetaLeads += toNum(camp?.totals?.leads)
+    totalMetaClicks += toNum(camp?.totals?.clicks)
+    totalMetaImpressions += toNum(camp?.totals?.impressions)
 
     // Meta spend по дням (из объявлений или строк Meta)
     for (const adset of camp?.adsets || []) {
@@ -496,6 +504,7 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
           const days = getDaysInRange(range.start, range.end)
           const isPeriod = days.length > 1
           if (isPeriod) isAnyDistributed = true
+          else if (sp > 0 || ld > 0) realDailyMetaCount++
 
           const spPerDay = sp / days.length
           const ldPerDay = ld / days.length
@@ -513,7 +522,7 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
             day.clicks += clkPerDay
             day.impressions += impPerDay
             if (sp > 0 || ld > 0) {
-              day.hasDailyMeta = true
+              if (!isPeriod) day.hasDailyMeta = true
               if (isPeriod) day.isDistributed = true
             }
           }
@@ -523,6 +532,7 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
 
     // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
+      totalBxLeads++
       const d = extractBitrixDateKey(deal)
       if (!d) continue
       if (dateFrom && d < dateFrom) continue
@@ -533,6 +543,8 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
       if (isWonStage(deal?.stage)) {
         day.wonDeals++
         day.revenue += toNum(deal?.amount)
+        totalWonDeals++
+        totalRevenue += toNum(deal?.amount)
       }
     }
   }
@@ -547,7 +559,22 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
 
   // Сортируем дни строго хронологически
   const allDays = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
-  const anyDailyMeta = allDays.some(d => d.hasDailyMeta)
+  const anyDailyMeta = realDailyMetaCount > 0
+
+  // Расчет пикового дня по лидам
+  let peakDay = null
+  let maxLeads = 0
+  for (const d of allDays) {
+    const leads = d.bxLeads > 0 ? d.bxLeads : Math.round(d.metaLeads)
+    if (leads > maxLeads) {
+      maxLeads = leads
+      peakDay = { date: d.date, leads }
+    }
+  }
+
+  const periodDaysCount = allDays.length || 1
+  const avgSpendPerDay = +(totalMetaSpend / periodDaysCount).toFixed(2)
+  const avgLeadsPerDay = +(totalBxLeads / periodDaysCount).toFixed(1)
 
   return allDays.map(d => {
     const leadsCount = d.bxLeads > 0 ? d.bxLeads : d.metaLeads
@@ -560,6 +587,14 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
       cpl: leadsCount > 0 && d.spend > 0 ? +(d.spend / leadsCount).toFixed(2) : null,
       totalMetaSpend: +totalMetaSpend.toFixed(2),
       totalMetaLeads,
+      totalMetaClicks,
+      totalMetaImpressions,
+      totalBxLeads,
+      totalWonDeals,
+      totalRevenue: Math.round(totalRevenue),
+      avgSpendPerDay,
+      avgLeadsPerDay,
+      peakDay,
       hasDailyMetaBreakdown: anyDailyMeta,
       isDistributed: d.isDistributed,
       isAnyDistributed,
