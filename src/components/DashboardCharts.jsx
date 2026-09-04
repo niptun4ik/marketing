@@ -80,7 +80,6 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
   const isCrmOnly = day.spend === 0 && day.bxLeads > 0
   const isMetaOnly = day.spend > 0 && day.bxLeads === 0
   const isBoth = day.spend > 0 && day.bxLeads > 0
-  const hasMetaSummary = !day.hasDailyMetaBreakdown && day.totalMetaSpend > 0
 
   return (
     <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-3 text-xs min-w-[260px] space-y-2 pointer-events-none select-none">
@@ -141,7 +140,11 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
             Заявки Meta:
           </span>
           <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
-            {day.hasDailyMetaBreakdown ? Number(day.metaLeads || 0) : `${day.totalMetaLeads || 0} (за период)`}
+            {day.metaLeads > 0
+              ? `${Number(day.metaLeads).toFixed(1)} ${day.isDistributed ? '(распред.)' : ''}`
+              : day.hasDailyMetaBreakdown
+              ? '0'
+              : `${day.totalMetaLeads || day.totalCampaignLeads || 0} (за период)`}
           </span>
         </div>
 
@@ -163,13 +166,20 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
             CPL (цена лида):
           </span>
           <span className="font-bold font-mono text-amber-600 dark:text-amber-400">
-            {day.cpl != null ? `$${Number(day.cpl).toFixed(2)}` : '—'}
+            {day.cpl != null ? `$${Number(day.cpl).toFixed(2)}` : (isCrmOnly ? 'Органический / без расхода' : '—')}
           </span>
         </div>
 
+        {/* Список активных кампаний за этот день */}
+        {day.activeCampaigns?.length > 0 && (
+          <div className="pt-1 text-[9px] text-zinc-400 border-t border-zinc-100 dark:border-zinc-800/60 truncate" title={day.activeCampaigns.join(', ')}>
+            Кампании: {day.activeCampaigns.slice(0, 2).join(', ')}{day.activeCampaigns.length > 2 ? ` (+еще ${day.activeCampaigns.length - 2})` : ''}
+          </div>
+        )}
+
         {/* Сноска о распределении */}
         {day.isDistributed && (
-          <div className="pt-1 text-[9px] text-zinc-400 italic">
+          <div className="pt-0.5 text-[9px] text-zinc-400 italic">
             * Отчёт Meta выгружен за период: расход распределён равномерно по активным дням кампании.
           </div>
         )}
@@ -221,11 +231,11 @@ function DailyChart({ dailyData }) {
   )
 
   const metaSummary = dailyData[0] || {}
-  const totalMetaSpend = metaSummary.totalMetaSpend || 0
-  const totalBxLeads = metaSummary.totalBxLeads || 0
-  const totalRevenue = metaSummary.totalRevenue || 0
-  const totalMetaLeads = metaSummary.totalMetaLeads || 0
-  const overallCpl = totalBxLeads > 0 && totalMetaSpend > 0 ? (totalMetaSpend / totalBxLeads).toFixed(2) : null
+  const totalMetaSpend = metaSummary.periodSpend ?? metaSummary.totalMetaSpend ?? 0
+  const totalBxLeads = metaSummary.periodBxLeads ?? metaSummary.totalBxLeads ?? 0
+  const totalRevenue = metaSummary.periodRevenue ?? metaSummary.totalRevenue ?? 0
+  const totalMetaLeads = metaSummary.periodMetaLeads ?? metaSummary.totalMetaLeads ?? 0
+  const overallCpl = metaSummary.periodCpl ?? (totalBxLeads > 0 && totalMetaSpend > 0 ? (totalMetaSpend / totalBxLeads).toFixed(2) : null)
   const hasAnySpend = (dailyData || []).some(d => d.spend > 0)
   const hasAnyRevenue = (dailyData || []).some(d => d.revenue > 0)
   const hasAnyWon = (dailyData || []).some(d => d.wonDeals > 0)
@@ -244,6 +254,11 @@ function DailyChart({ dailyData }) {
               <span className="text-[9px] text-zinc-400 font-normal">(${metaSummary?.avgSpendPerDay}/д)</span>
             )}
           </div>
+          {metaSummary?.totalCampaignSpend > totalMetaSpend && (
+            <span className="text-[9px] text-zinc-400 block mt-0.5">
+              из ${metaSummary.totalCampaignSpend} за всю кампанию
+            </span>
+          )}
         </div>
 
         <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-lg border border-zinc-200/50 dark:border-zinc-800/60">

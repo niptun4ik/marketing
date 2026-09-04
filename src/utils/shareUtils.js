@@ -8,28 +8,37 @@
 export async function encodeReportPayload({ metaRows = [], bitrixRows = [], metaFile, bitrixFile, filters }) {
   const minified = {
     m: (metaRows || []).map(r => ({
-      c: r.campaign_name,
-      s: r.spend,
-      cl: r.clicks,
-      im: r.impressions,
-      l: r.leads,
-      d: r.date,
-      de: r.date_end,
-      ad: r.adset_name,
-      a: r.ad_name,
+      c: r.campaign_name || r['Кампания'] || r['Название кампании'],
+      s: r.spend || r['Потраченная сумма (USD)'] || r['Потраченная сумма'],
+      cl: r.clicks || r['Клики по ссылке'] || r['Клики (все)'],
+      im: r.impressions || r['Показы'],
+      l: r.leads || r['Результат'],
+      d: r.date || r['Дата начала отчетности'] || r['День'] || r['Дата начала'] || r['Day'] || r['Дата'] || r['Начало'],
+      de: r.date_end || r['Окончание отчетности'] || r['Дата окончания'] || r['Date stop'] || r['End date'] || r['Конец'],
+      ad: r.adset_name || r['Название группы объявлений'],
+      a: r.ad_name || r['Название объявления'],
     })),
-    b: (bitrixRows || []).map(r => ({
-      id: r.deal_id,
-      dt: r.created_date,
-      n: r.deal_name,
-      st: r.stage,
-      a: r.amount,
-      uc: r.utm_campaign,
-      us: r.utm_source,
-      f: r.formname,
-      cur: r.currency,
-      man: r.manager || r['Ответственный'],
-    })),
+    b: (bitrixRows || []).map(r => {
+      const extraTexts = Object.entries(r)
+        .filter(([k, v]) => typeof v === 'string' && v.trim().length > 0 && !['deal_id', 'created_date', 'deal_name', 'stage', 'amount', 'utm_campaign', 'utm_source', 'formname', 'currency', 'manager', 'Ответственный'].includes(k))
+        .map(([k, v]) => `${k}: ${v}`)
+        .slice(0, 5)
+        .join(' | ');
+
+      return {
+        id: r.deal_id || r['ID'],
+        dt: r.created_date || r['Дата создания'] || r['Дата добавления'],
+        n: r.deal_name || r['Сделка'] || r['Название сделки'],
+        st: r.stage || r['Стадия'],
+        a: r.amount || r['Сумма'] || r['Сумма/Валюта'],
+        uc: r.utm_campaign || r['UTM Campaign'],
+        us: r.utm_source || r['UTM Source'],
+        f: r.formname,
+        cur: r.currency || r['Валюта'],
+        man: r.manager || r['Ответственный'],
+        txt: extraTexts || undefined,
+      };
+    }),
     mf: metaFile?.name || 'Meta Ads',
     bf: bitrixFile?.name || 'Bitrix24',
     t: Date.now(),
@@ -104,6 +113,7 @@ export async function decodeReportPayload(base64Str) {
       currency: r.cur,
       manager: r.man,
       'Ответственный': r.man,
+      'Дополнительно': r.txt || '',
     }));
 
     return {

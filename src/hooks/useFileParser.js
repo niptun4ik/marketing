@@ -72,12 +72,48 @@ export function parseFile(file) {
       reader.onload = (e) => {
         try {
           // raw: true — сохраняем оригинальные строки из ячеек (напр. "01.09.2026") без ложной US-конверсии
-          const wb   = XLSX.read(e.target.result, { type: 'array', raw: true })
-          const ws   = wb.Sheets[wb.SheetNames[0]]
-          const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' })
-          const rows = raw.map(normalizeRow)
-          const columns = rows.length > 0 ? Object.keys(rows[0]) : []
-          resolve({ rows, columns })
+          const wb = XLSX.read(e.target.result, { type: 'array', raw: true })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          
+          // Проверяем первые строки на наличие заголовков (актуально для выгрузок Meta Ads с заголовком отчета вверху)
+          const rawMatrix = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+          const HEADER_KEYWORDS = [
+            'кампани', 'campaign', 'spend', 'потрачен', 'затрат', 'расход',
+            'клик', 'click', 'показ', 'impr', 'лид', 'lead', 'результат',
+            'date', 'дата', 'сделк', 'deal', 'стади', 'stage', 'сумм', 'amount'
+          ]
+          
+          let headerIdx = 0
+          for (let i = 0; i < Math.min(10, rawMatrix.length); i++) {
+            const row = rawMatrix[i]
+            if (!Array.isArray(row)) continue
+            const matchCount = row.filter(cell => {
+              const s = String(cell || '').toLowerCase()
+              return HEADER_KEYWORDS.some(kw => s.includes(kw))
+            }).length
+            if (matchCount >= 2) {
+              headerIdx = i
+              break
+            }
+          }
+
+          const headerRow = rawMatrix[headerIdx] || []
+          const columns = headerRow.map((c, idx) => String(c || '').trim() || `_col_${idx}`)
+          const rows = []
+          for (let i = headerIdx + 1; i < rawMatrix.length; i++) {
+            const rowArr = rawMatrix[i]
+            if (!rowArr || rowArr.every(c => c === '' || c == null)) continue
+            const rowObj = {}
+            columns.forEach((col, colIdx) => {
+              if (!col.startsWith('_col_')) {
+                rowObj[col] = normalizeCell(rowArr[colIdx])
+              }
+            })
+            rows.push(rowObj)
+          }
+
+          const cleanCols = columns.filter(c => !c.startsWith('_col_'))
+          resolve({ rows, columns: cleanCols })
         } catch (err) {
           reject(err)
         }

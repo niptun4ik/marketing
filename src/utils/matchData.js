@@ -41,6 +41,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
         campaign_name: rawCampName,
         adsets: new Map(),
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
+        dateRange: extractMetaDateRange(row),
       })
     }
     const camp = metaMap.get(campKey)
@@ -48,6 +49,17 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
     camp.totals.impressions += toNum(row?.impressions)
     camp.totals.clicks      += toNum(row?.clicks)
     camp.totals.leads       += toNum(row?.leads)
+
+    // Актуализируем общий диапазон дат кампании
+    const r = extractMetaDateRange(row)
+    if (r?.start) {
+      if (!camp.dateRange) {
+        camp.dateRange = { ...r }
+      } else {
+        if (r.start < camp.dateRange.start) camp.dateRange.start = r.start
+        if (r.end > camp.dateRange.end) camp.dateRange.end = r.end
+      }
+    }
 
     const rawAdsetName = String(row?.adset_name || '(без группы)').trim()
     const adsetKey = norm(rawAdsetName)
@@ -67,58 +79,71 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
     adset.totals.leads       += toNum(row?.leads)
   }
 
-  // Хелпер для поиска наиболее подходящей кампании для сделки
-  const metaCampaignKeys = Array.from(metaMap.keys())
+  // Сортируем кампании Meta: сначала активные с расходом и лидами
+  const metaEntries = Array.from(metaMap.entries()).map(([k, v]) => ({
+    key: k,
+    data: v,
+    spend: v.totals.spend,
+    hasActivity: v.totals.spend > 0 || v.totals.impressions > 0 || v.totals.leads > 0,
+  }))
+  metaEntries.sort((a, b) => b.spend - a.spend)
 
+  // Хелпер для умного поиска наиболее подходящей кампании для сделки
   const findBestCampaignKey = (deal) => {
     // 1. Прямая точная метка utm_campaign
     const directKey = norm(deal?.utm_campaign)
     if (directKey && metaMap.has(directKey)) return directKey
 
-    // 2. Поиск по подстроке utm_campaign
+    // 2. Поиск по подстроке utm_campaign среди активных кампаний
     if (directKey) {
-      const subMatch = metaCampaignKeys.find(k => k.includes(directKey) || directKey.includes(k))
-      if (subMatch) return subMatch
+      const subMatch = metaEntries.find(e => e.key.includes(directKey) || directKey.includes(e.key))
+      if (subMatch) return subMatch.key
     }
 
-    // 3. Умный поиск по formname, названию сделки или источнику
-    const combinedText = norm([
-      deal?.formname,
-      deal?.deal_name,
-      deal?.utm_source,
-      deal?.utm_content,
-      deal?.['Название сделки'],
-      deal?.['formname'],
-      deal?.['Дополнительно об источнике'],
-    ].filter(Boolean).join(' '))
+    // 3. Полный текстовый контекст сделки (включая кастомные вопросы анкет, источник, форму)
+    const allDealText = norm(
+      Object.entries(deal || {})
+        .filter(([k, v]) => typeof v === 'string' && v.trim().length > 0 && !k.startsWith('_'))
+        .map(([k, v]) => `${k} ${v}`)
+        .join(' ')
+    )
 
-    if (combinedText) {
-      // Ищем совпадение среди реальных кампаний Meta
-      for (const campKey of metaCampaignKeys) {
-        // Очищаем от мусорных слов типа "лендинг", "лиды", "тест"
-        const cleanKey = campKey.replace(/[|()—–\-_]/g, ' ').replace(/\s+/g, ' ').trim()
-        const words = cleanKey.split(' ').filter(w => w.length > 3)
-        // Если ключевые слова (например "отношения", "моп", "астана") встречаются в сделке
-        const matchCount = words.filter(w => combinedText.includes(w)).length
+    if (allDealText) {
+      // Ищем совпадение ключевых слов сначала в активных кампаниях Meta
+      for (const { key } of metaEntries) {
+        const cleanKey = key.replace(/[|()—–\-_]/g, ' ').replace(/\s+/g, ' ').trim()
+        const words = cleanKey.split(' ').filter(w => w.length > 3 && !['лиды', 'тест', 'видео', 'kz', 'landing', 'лендинг'].includes(w))
+        const matchCount = words.filter(w => allDealText.includes(w)).length
         if (words.length > 0 && matchCount >= Math.min(2, words.length)) {
-          return campKey
+          return key
         }
       }
 
-      // Специальные распространенные маркеры
-      if (combinedText.includes('отношен')) {
-        const otnoshCamp = metaCampaignKeys.find(k => k.includes('отношен'))
-        if (otnoshCamp) return otnoshCamp
+      // Специальные распространенные семантические маркеры (приоритет активным кампаниям)
+      if (allDealText.includes('отношен')) {
+        const active = metaEntries.find(e => e.hasActivity && e.key.includes('отношен'))
+        if (active) return active.key
+        const any = metaEntries.find(e => e.key.includes('отношен'))
+        if (any) return any.key
       }
-      if (combinedText.includes('моп')) {
-        const mopCamp = metaCampaignKeys.find(k => k.includes('моп'))
-        if (mopCamp) return mopCamp
+      if (allDealText.includes('моп')) {
+        const active = metaEntries.find(e => e.hasActivity && e.key.includes('моп'))
+        if (active) return active.key
+      }
+      if (allDealText.includes('семинар')) {
+        const active = metaEntries.find(e => e.hasActivity && (e.key.includes('семинар') || e.key.includes('seminar')))
+        if (active) return active.key
+      }
+      if (allDealText.includes('whatsapp') || allDealText.includes('ватсап')) {
+        const active = metaEntries.find(e => e.hasActivity && (e.key.includes('ватсап') || e.key.includes('w/a') || e.key.includes('whatsapp')))
+        if (active) return active.key
       }
     }
 
-    // Если у нас в Meta вообще всего 1 кампания, и сделка пришла из таргета/формы
-    if (metaCampaignKeys.length === 1 && (combinedText.includes('форма') || combinedText.includes('сайт') || combinedText.includes('таргет') || !deal?.utm_campaign)) {
-      return metaCampaignKeys[0]
+    // Если у нас в Meta всего 1 кампания с активностью
+    const activeCamps = metaEntries.filter(e => e.hasActivity)
+    if (activeCamps.length === 1 && (allDealText.includes('форма') || allDealText.includes('сайт') || allDealText.includes('таргет') || !deal?.utm_campaign)) {
+      return activeCamps[0].key
     }
 
     return directKey || '(без кампании)'
@@ -156,6 +181,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
       adsets,
       bxDeals,
       totals: campData.totals,
+      dateRange: campData.dateRange,
       metrics: computeCampaignMetrics(campData.totals, bxDeals, margin, usdRate),
     })
   }
@@ -169,6 +195,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
         adsets: [],
         bxDeals: deals,
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
+        dateRange: null,
         metrics: computeCampaignMetrics({ spend: 0, impressions: 0, clicks: 0, leads: 0 }, deals, margin, usdRate),
         unmatched: true,
       })
@@ -330,20 +357,38 @@ export const extractMetaDateKey = (row) => {
 
 export const extractMetaDateRange = (row) => {
   if (!row) return null
+
+  // 1. Попытка распарсить диапазон из строкового поля (напр. "2026-07-21 — 2026-09-03" или "21.07.2026 - 03.09.2026")
+  for (const val of Object.values(row)) {
+    if (typeof val === 'string' && (val.includes('—') || val.includes(' - ') || val.includes('..') || val.includes(' по '))) {
+      const splitParts = val.split(/[—–]|\s-\s|\.\.|\sпо\s/).map(s => s.trim()).filter(Boolean)
+      if (splitParts.length >= 2) {
+        const s = parseDateKey(splitParts[0])
+        const e = parseDateKey(splitParts[1])
+        if (s && e) return { start: s, end: e }
+      }
+    }
+  }
+
   const startRaw = row.date ||
+    row.date_start ||
     row['Дата начала отчетности'] ||
     row['Дата начала'] ||
     row['Date start'] ||
+    row['Start date'] ||
     row['Reporting starts'] ||
     row['День'] ||
     row['Day'] ||
-    row['Дата']
-  const start = parseDateKey(startRaw)
+    row['Дата'] ||
+    row['Начало']
+  let start = parseDateKey(startRaw)
 
   let endRaw = row.date_end ||
+    row.date_stop ||
     row['Окончание отчетности'] ||
     row['Дата окончания'] ||
     row['Date stop'] ||
+    row['End date'] ||
     row['Reporting ends'] ||
     row['Конец'] ||
     row['Конец отчетности']
@@ -362,10 +407,22 @@ export const extractMetaDateRange = (row) => {
   }
 
   if (!start) {
+    for (const [k, val] of Object.entries(row)) {
+      if (typeof val === 'string' && val.length >= 8) {
+        const kLower = k.toLowerCase()
+        if (kLower.includes('начал') || kLower.includes('старт') || kLower.includes('start') || kLower.includes('from') || kLower.includes('день') || kLower.includes('дата')) {
+          const d = parseDateKey(val)
+          if (d) { start = d; break }
+        }
+      }
+    }
+  }
+
+  if (!start) {
     for (const val of Object.values(row)) {
       if (typeof val === 'string' && val.length >= 8) {
         const d = parseDateKey(val)
-        if (d) return { start: d, end: d }
+        if (d) return { start: d, end: end || d }
       }
     }
     return null
@@ -470,37 +527,45 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
         revenue: 0,
         hasDailyMeta: false,
         isDistributed: false,
+        activeCampaigns: new Set(),
       })
     }
     return byDay.get(date)
   }
 
-  let totalMetaSpend = 0
-  let totalMetaLeads = 0
-  let totalMetaClicks = 0
-  let totalMetaImpressions = 0
-  let totalBxLeads = 0
-  let totalWonDeals = 0
-  let totalRevenue = 0
+  let totalCampaignSpend = 0
+  let totalCampaignLeads = 0
+  let totalCampaignClicks = 0
+  let totalCampaignImpressions = 0
   let isAnyDistributed = false
   let realDailyMetaCount = 0
 
   for (const camp of campaigns || []) {
-    totalMetaSpend += toNum(camp?.totals?.spend)
-    totalMetaLeads += toNum(camp?.totals?.leads)
-    totalMetaClicks += toNum(camp?.totals?.clicks)
-    totalMetaImpressions += toNum(camp?.totals?.impressions)
+    const campSpend = toNum(camp?.totals?.spend)
+    const campLeads = toNum(camp?.totals?.leads)
+    const campClicks = toNum(camp?.totals?.clicks)
+    const campImpressions = toNum(camp?.totals?.impressions)
+
+    totalCampaignSpend += campSpend
+    totalCampaignLeads += campLeads
+    totalCampaignClicks += campClicks
+    totalCampaignImpressions += campImpressions
 
     // Meta spend по дням (из объявлений или строк Meta)
+    let distributedAdSpend = 0
+    let distributedAdLeads = 0
+    let distributedAdClicks = 0
+    let distributedAdImpressions = 0
+
     for (const adset of camp?.adsets || []) {
       for (const ad of adset?.ads || []) {
-        const range = extractMetaDateRange(ad)
-        if (range?.start) {
-          const sp = toNum(ad?.spend || ad?.['Потраченная сумма (USD)'] || ad?.['Потраченная сумма'])
-          const ld = toNum(ad?.leads || ad?.['Результат'])
-          const clk = toNum(ad?.clicks || ad?.['Клики по ссылке'])
-          const imp = toNum(ad?.impressions || ad?.['Показы'])
+        const range = extractMetaDateRange(ad) || camp?.dateRange
+        const sp = toNum(ad?.spend || ad?.['Потраченная сумма (USD)'] || ad?.['Потраченная сумма'])
+        const ld = toNum(ad?.leads || ad?.['Результат'])
+        const clk = toNum(ad?.clicks || ad?.['Клики по ссылке'] || ad?.['Клики (все)'])
+        const imp = toNum(ad?.impressions || ad?.['Показы'])
 
+        if (range?.start && (sp > 0 || ld > 0 || clk > 0 || imp > 0)) {
           const days = getDaysInRange(range.start, range.end)
           const isPeriod = days.length > 1
           if (isPeriod) isAnyDistributed = true
@@ -510,6 +575,11 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
           const ldPerDay = ld / days.length
           const clkPerDay = clk / days.length
           const impPerDay = imp / days.length
+
+          distributedAdSpend += sp
+          distributedAdLeads += ld
+          distributedAdClicks += clk
+          distributedAdImpressions += imp
 
           for (const d of days) {
             // Если задан фильтр дат, отсекаем дни вне диапазона
@@ -521,6 +591,7 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
             day.metaLeads += ldPerDay
             day.clicks += clkPerDay
             day.impressions += impPerDay
+            day.activeCampaigns.add(camp.campaign_name)
             if (sp > 0 || ld > 0) {
               if (!isPeriod) day.hasDailyMeta = true
               if (isPeriod) day.isDistributed = true
@@ -530,9 +601,42 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
       }
     }
 
+    // Fallback: если у кампании есть расход, но в объявлениях он не был распределен
+    if (campSpend > 0 && distributedAdSpend < campSpend * 0.95) {
+      const remainingSpend = campSpend - distributedAdSpend
+      const remainingLeads = Math.max(0, campLeads - distributedAdLeads)
+      const remainingClicks = Math.max(0, campClicks - distributedAdClicks)
+      const remainingImpressions = Math.max(0, campImpressions - distributedAdImpressions)
+      const range = camp?.dateRange || (dateFrom && dateTo ? { start: dateFrom, end: dateTo } : null)
+
+      if (range?.start) {
+        const days = getDaysInRange(range.start, range.end)
+        const isPeriod = days.length > 1
+        if (isPeriod) isAnyDistributed = true
+
+        const spPerDay = remainingSpend / days.length
+        const ldPerDay = remainingLeads / days.length
+        const clkPerDay = remainingClicks / days.length
+        const impPerDay = remainingImpressions / days.length
+
+        for (const d of days) {
+          if (dateFrom && d < dateFrom) continue
+          if (dateTo && d > dateTo) continue
+
+          const day = ensureDay(d)
+          day.spend += spPerDay
+          day.metaLeads += ldPerDay
+          day.clicks += clkPerDay
+          day.impressions += impPerDay
+          day.activeCampaigns.add(camp.campaign_name)
+          if (isPeriod) day.isDistributed = true
+          else day.hasDailyMeta = true
+        }
+      }
+    }
+
     // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
-      totalBxLeads++
       const d = extractBitrixDateKey(deal)
       if (!d) continue
       if (dateFrom && d < dateFrom) continue
@@ -543,8 +647,6 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
       if (isWonStage(deal?.stage)) {
         day.wonDeals++
         day.revenue += toNum(deal?.amount)
-        totalWonDeals++
-        totalRevenue += toNum(deal?.amount)
       }
     }
   }
@@ -561,10 +663,26 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
   const allDays = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
   const anyDailyMeta = realDailyMetaCount > 0
 
-  // Расчет пикового дня по лидам
+  // Расчет суммарных метрик именно для отображаемого периода графика
+  let periodSpend = 0
+  let periodBxLeads = 0
+  let periodMetaLeads = 0
+  let periodClicks = 0
+  let periodImpressions = 0
+  let periodRevenue = 0
+  let periodWonDeals = 0
   let peakDay = null
   let maxLeads = 0
+
   for (const d of allDays) {
+    periodSpend += d.spend
+    periodBxLeads += d.bxLeads
+    periodMetaLeads += d.metaLeads
+    periodClicks += d.clicks
+    periodImpressions += d.impressions
+    periodRevenue += d.revenue
+    periodWonDeals += d.wonDeals
+
     const leads = d.bxLeads > 0 ? d.bxLeads : Math.round(d.metaLeads)
     if (leads > maxLeads) {
       maxLeads = leads
@@ -573,28 +691,49 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
   }
 
   const periodDaysCount = allDays.length || 1
-  const avgSpendPerDay = +(totalMetaSpend / periodDaysCount).toFixed(2)
-  const avgLeadsPerDay = +(totalBxLeads / periodDaysCount).toFixed(1)
+  const avgSpendPerDay = +(periodSpend / periodDaysCount).toFixed(2)
+  const avgLeadsPerDay = +(periodBxLeads / periodDaysCount).toFixed(1)
+  const periodCpl = periodBxLeads > 0 && periodSpend > 0 ? +(periodSpend / periodBxLeads).toFixed(2) : null
 
   return allDays.map(d => {
     const leadsCount = d.bxLeads > 0 ? d.bxLeads : d.metaLeads
     return {
-      ...d,
+      date: d.date,
       spend: +d.spend.toFixed(2),
       metaLeads: +d.metaLeads.toFixed(1),
       clicks: Math.round(d.clicks),
       impressions: Math.round(d.impressions),
+      bxLeads: d.bxLeads,
+      wonDeals: d.wonDeals,
+      revenue: Math.round(d.revenue),
       cpl: leadsCount > 0 && d.spend > 0 ? +(d.spend / leadsCount).toFixed(2) : null,
-      totalMetaSpend: +totalMetaSpend.toFixed(2),
-      totalMetaLeads,
-      totalMetaClicks,
-      totalMetaImpressions,
-      totalBxLeads,
-      totalWonDeals,
-      totalRevenue: Math.round(totalRevenue),
+      activeCampaigns: Array.from(d.activeCampaigns || []),
+
+      // Метрики фильтрованного диапазона графика
+      periodSpend: +periodSpend.toFixed(2),
+      periodBxLeads,
+      periodMetaLeads: Math.round(periodMetaLeads),
+      periodClicks: Math.round(periodClicks),
+      periodImpressions: Math.round(periodImpressions),
+      periodRevenue: Math.round(periodRevenue),
+      periodWonDeals,
+      periodCpl,
       avgSpendPerDay,
       avgLeadsPerDay,
       peakDay,
+
+      // Обратная совместимость для компонентов
+      totalMetaSpend: +periodSpend.toFixed(2),
+      totalMetaLeads: Math.round(periodMetaLeads),
+      totalMetaClicks: Math.round(periodClicks),
+      totalMetaImpressions: Math.round(periodImpressions),
+      totalBxLeads: periodBxLeads,
+      totalWonDeals: periodWonDeals,
+      totalRevenue: Math.round(periodRevenue),
+
+      // Общие показатели кампаний за весь период
+      totalCampaignSpend: +totalCampaignSpend.toFixed(2),
+      totalCampaignLeads: Math.round(totalCampaignLeads),
       hasDailyMetaBreakdown: anyDailyMeta,
       isDistributed: d.isDistributed,
       isAnyDistributed,
