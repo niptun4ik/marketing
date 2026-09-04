@@ -16,8 +16,10 @@ const META_FIELDS = [
 const BITRIX_FIELDS = [
   { key: 'deal_id',      label: 'ID сделки / лида', required: false },
   { key: 'created_date', label: 'Дата создания', required: false },
-  { key: 'utm_source',   label: 'utm_source', required: false },
-  { key: 'utm_campaign', label: 'utm_campaign / Кампания', required: true },
+  { key: 'deal_name',    label: 'Название сделки', required: false },
+  { key: 'formname',     label: 'Название формы (formname)', required: false },
+  { key: 'utm_source',   label: 'utm_source / Источник', required: false },
+  { key: 'utm_campaign', label: 'utm_campaign / Кампания', required: false },
   { key: 'stage',        label: 'Стадия сделки', required: true },
   { key: 'amount',       label: 'Сумма сделки', required: false },
 ]

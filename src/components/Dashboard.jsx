@@ -7,6 +7,7 @@ import AnalyticsTable from './AnalyticsTable'
 import ExportButton from './ExportButton'
 import PlanFactPanel from './PlanFactPanel'
 import DailyReportModal from './DailyReportModal'
+import CRMTab from './CRMTab'
 import { FileText } from 'lucide-react'
 import {
   matchAndAggregate,
@@ -32,6 +33,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   const [margin, setMargin] = useState(30)
   const [stageOrder, setStageOrder] = useState([])
   const [showDailyReport, setShowDailyReport] = useState(false)
+  const [activeTab, setActiveTab] = useState('meta') // 'meta' | 'crm'
 
   // Load funnel config from Supabase
   useEffect(() => {
@@ -116,6 +118,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
 
   return (
     <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-5 space-y-4 animate-fade-in">
+
       {/* Top bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -127,56 +130,87 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {activeTab === 'meta' && (
+            <>
+              <button
+                onClick={() => setShowDailyReport(true)}
+                className="btn-secondary flex items-center gap-1.5"
+                title="Сформировать готовый утренний отчет"
+              >
+                <FileText size={13} />
+                <span>Отчет за день</span>
+              </button>
+              <ExportButton campaigns={filteredCampaigns} />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Вкладки */}
+      <div className="flex items-center gap-1 p-1 rounded-lg bg-zinc-100 dark:bg-zinc-800/60 w-fit">
+        {[
+          { key: 'meta', label: '📊 Meta Ads' },
+          { key: 'crm',  label: '🗂 CRM / Bitrix' },
+        ].map(tab => (
           <button
-            onClick={() => setShowDailyReport(true)}
-            className="btn-secondary flex items-center gap-1.5"
-            title="Сформировать готовый утренний отчет"
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all ${
+              activeTab === tab.key
+                ? 'bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 shadow-sm'
+                : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+            }`}
           >
-            <FileText size={13} />
-            <span>Отчет за день</span>
+            {tab.label}
           </button>
-          <ExportButton campaigns={filteredCampaigns} />
-        </div>
+        ))}
       </div>
 
-      {/* KPIs */}
-      <KPICards totals={totals} margin={margin} onMarginChange={setMargin} />
+      {/* Контент вкладок */}
+      {activeTab === 'crm' ? (
+        <CRMTab bitrixRows={bitrixRows} />
+      ) : (
+        <>
+          {/* KPIs */}
+          <KPICards totals={totals} margin={margin} onMarginChange={setMargin} />
 
-      {/* Plan-Fact */}
-      <PlanFactPanel totals={totals} />
+          {/* Plan-Fact */}
+          <PlanFactPanel totals={totals} />
 
-      {/* Filters */}
-      <FiltersBar filters={filters} onChange={setFilters} />
+          {/* Filters */}
+          <FiltersBar filters={filters} onChange={setFilters} />
 
-      {/* Charts */}
-      <DashboardCharts
-        chartData={chartData}
-        funnelData={funnelData}
-        bxDeals={allBxDeals}
-        session={session}
-        stageOrder={stageOrder}
-        onStageOrderChange={setStageOrder}
-      />
+          {/* Charts */}
+          <DashboardCharts
+            chartData={chartData}
+            funnelData={funnelData}
+            bxDeals={allBxDeals}
+            session={session}
+            stageOrder={stageOrder}
+            onStageOrderChange={setStageOrder}
+          />
 
-      {/* Table */}
-      <AnalyticsTable 
-        campaigns={filteredCampaigns} 
-        totals={totals} 
-        onHideCampaign={(name) => setFilters(f => ({ ...f, hiddenCampaigns: [...(f.hiddenCampaigns || []), name] }))}
-        session={session}
-      />
+          {/* Table */}
+          <AnalyticsTable
+            campaigns={filteredCampaigns}
+            totals={totals}
+            onHideCampaign={(name) => setFilters(f => ({ ...f, hiddenCampaigns: [...(f.hiddenCampaigns || []), name] }))}
+            session={session}
+          />
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-400 pb-4">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-green-200 dark:bg-green-900/40" />
-          ROAS ≥ 100%
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded bg-red-200 dark:bg-red-900/40" />
-          Spend &gt; 0, Продаж = 0 или убыток
-        </div>
-      </div>
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-xs text-gray-400 pb-4">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-green-200 dark:bg-green-900/40" />
+              ROAS ≥ 100%
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-red-200 dark:bg-red-900/40" />
+              Spend &gt; 0, Продаж = 0 или убыток
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Daily Report Modal */}
       <DailyReportModal

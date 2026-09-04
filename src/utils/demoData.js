@@ -68,7 +68,9 @@ export const META_FIELD_ALIASES = {
 export const BITRIX_FIELD_ALIASES = {
   deal_id:      ['id', 'deal id', 'lead id', 'id сделки', 'deal_id', '# сделки'],
   created_date: ['created date', 'дата создания', 'date', 'дата', 'created_date', 'дата добавления'],
-  utm_source:   ['utm_source', 'utm source', 'источник', 'source'],
+  deal_name:    ['название сделки', 'название', 'deal_name', 'deal name', 'тема'],
+  formname:     ['formname', 'название формы', 'crm-форма', 'создана crm-формой', 'форма'],
+  utm_source:   ['utm_source', 'utm source', 'источник', 'source', 'источник сделки'],
   utm_campaign: ['utm_campaign', 'utm campaign', 'кампания', 'campaign', 'utm-кампания'],
   stage:        ['stage', 'стадия', 'статус', 'status', 'стадия сделки'],
   amount:       ['amount', 'сумма', 'выручка', 'revenue', 'сумма сделки'],

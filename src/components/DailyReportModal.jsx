@@ -1,185 +1,195 @@
 // components/DailyReportModal.jsx
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { X, Copy, Check, MessageSquare } from 'lucide-react'
 import { toNum, isWonStage, norm } from '../utils/matchData'
 
-export default function DailyReportModal({ isOpen, onClose, metaRows = [], bitrixRows = [], campaigns = [] }) {
-  // По умолчанию вчерашняя дата
-  const yesterdayStr = useMemo(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 1)
-    return d.toISOString().split('T')[0]
-  }, [])
-
-  const [selectedDate, setSelectedDate] = useState(yesterdayStr)
-  const [copied, setCopied] = useState(false)
-
-  // Парсинг любой строки даты
-  const parseDateStr = (raw) => {
-    if (!raw) return null
-    if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().split('T')[0]
-    const s = String(raw).trim()
-    const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
-    if (isoMatch) {
-      const [, y, m, d] = isoMatch
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    const ruMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
-    if (ruMatch) {
-      const [, d, m, y] = ruMatch
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    return s.slice(0, 10)
+/**
+ * Точный парсер для дат из файлов Bitrix24 и Meta Ads.
+ * Приоритет: русский формат ДД.ММ.ГГГГ, ISO ГГГГ-ММ-ДД.
+ * Всегда возвращает ключ 'YYYY-MM-DD' для надежного сопоставления.
+ */
+export const parseDateKey = (raw) => {
+  if (!raw) return null
+  if (raw instanceof Date && !isNaN(raw.getTime())) {
+    return raw.toISOString().split('T')[0]
   }
 
-  // Расчет статистики с разбивкой по каждой кампании за день
+  const s = String(raw).trim()
+
+  // 1. Формат DD.MM.YYYY или DD/MM/YYYY (например "19.08.2026", "19.08.2026 14:30")
+  const ruMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
+  if (ruMatch) {
+    const [, d, m, y] = ruMatch
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  // 2. Формат YYYY-MM-DD (например "2026-08-19")
+  const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  return null
+}
+
+/** Превращает 'YYYY-MM-DD' в красивое '19.08.2026' */
+const formatRuDate = (key) => {
+  if (!key) return ''
+  const [y, m, d] = key.split('-')
+  return `${d}.${m}.${y}`
+}
+
+export default function DailyReportModal({ isOpen, onClose, metaRows = [], bitrixRows = [], campaigns = [] }) {
+  // 1. Собираем реальные доступные даты из Bitrix и Meta
+  const availableDates = useMemo(() => {
+    const counts = new Map()
+    const addDate = (d) => {
+      const key = parseDateKey(d)
+      if (key) counts.set(key, (counts.get(key) || 0) + 1)
+    }
+
+    bitrixRows.forEach(r => addDate(r?.created_date))
+    metaRows.forEach(r => addDate(r?.date))
+
+    return Array.from(counts.entries())
+      .map(([dateKey, count]) => ({
+        dateKey,
+        formatted: formatRuDate(dateKey),
+        count,
+      }))
+      .sort((a, b) => b.dateKey.localeCompare(a.dateKey)) // самые свежие сверху
+  }, [bitrixRows, metaRows])
+
+  // По умолчанию выбираем самый свежий день из данных
+  const [selectedKey, setSelectedKey] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (availableDates.length > 0 && !availableDates.some(d => d.dateKey === selectedKey)) {
+      setSelectedKey(availableDates[0].dateKey)
+    }
+  }, [availableDates, selectedKey])
+
+  // Определяем период Meta файла (для пометки в отчёте)
+  const metaPeriod = useMemo(() => {
+    const dates = (metaRows || []).map(r => parseDateKey(r?.date)).filter(Boolean).sort()
+    if (!dates.length) return null
+    return { from: dates[0], to: dates[dates.length - 1] }
+  }, [metaRows])
+
+  // Реальный расчет: Meta — итоги за период, Bitrix — только за выбранный день
   const reportData = useMemo(() => {
-    if (!selectedDate) return { items: [], total: null }
+    if (!selectedKey) return { items: [], bxDeals: [], hasDailyMeta: false }
 
-    // 1. Фильтруем сделки Bitrix за выбранный день
-    const dayDeals = (bitrixRows || []).filter(d => parseDateStr(d?.created_date) === selectedDate)
+    // Bitrix: сделки только за выбранный день
+    const dayDeals = (bitrixRows || []).filter(d => parseDateKey(d?.created_date) === selectedKey)
 
-    // 2. Фильтруем строки Meta за выбранный день
-    const dayMeta = (metaRows || []).filter(r => parseDateStr(r?.date) === selectedDate)
+    // Meta: если файл содержит строки за конкретный день — берём их
+    //       если нет (отчёт за период) — берём ВСЕ строки с пометкой «за период»
+    const dayMeta = (metaRows || []).filter(r => parseDateKey(r?.date) === selectedKey)
     const hasDailyMeta = dayMeta.length > 0
+    const metaSource = hasDailyMeta ? dayMeta : (metaRows || [])
 
-    // Группируем кампании
+    // Агрегируем Meta по кампаниям
     const campMap = new Map()
-
-    // Инициализируем из списка существующих кампаний
-    for (const c of campaigns || []) {
-      const name = c.campaign_name
-      campMap.set(norm(name), {
-        name,
-        spend: 0,
-        clicks: 0,
-        leads: 0,
-        deals: 0,
-        paidDeals: 0,
-        revenue: 0,
-      })
+    for (const row of metaSource) {
+      const name = row?.campaign_name || '(без кампании)'
+      const key = name.toLowerCase().trim()
+      if (!campMap.has(key)) campMap.set(key, { name, spend: 0, clicks: 0, impressions: 0, metaLeads: 0 })
+      const c = campMap.get(key)
+      c.spend       += toNum(row?.spend)
+      c.clicks      += toNum(row?.clicks)
+      c.impressions += toNum(row?.impressions)
+      c.metaLeads   += toNum(row?.leads)
     }
 
-    if (hasDailyMeta) {
-      // Точные данные по дням из Meta
-      for (const row of dayMeta) {
-        const key = norm(row?.campaign_name || '(без кампании)')
-        if (!campMap.has(key)) {
-          campMap.set(key, { name: row?.campaign_name, spend: 0, clicks: 0, leads: 0, deals: 0, paidDeals: 0, revenue: 0 })
-        }
-        const item = campMap.get(key)
-        item.spend  += toNum(row?.spend)
-        item.clicks += toNum(row?.clicks)
-        item.leads  += toNum(row?.leads)
-      }
-    } else {
-      // Если у Meta нет дат, пропорционально распределяем бюджет по кампаниям, где были лиды/сделки в этот день
-      for (const c of campaigns || []) {
-        const key = norm(c.campaign_name)
-        const item = campMap.get(key)
-        const totalCampDeals = c.bxDeals?.length || 1
-        const dayCampDeals = dayDeals.filter(d => norm(d?.utm_campaign) === key).length
-        const share = dayCampDeals > 0 ? (dayCampDeals / totalCampDeals) : 0
-        item.spend  = +(toNum(c.totals?.spend) * share).toFixed(2)
-        item.clicks = Math.round(toNum(c.totals?.clicks) * share)
-        item.leads  = Math.round(toNum(c.totals?.leads) * share)
-      }
-    }
-
-    // Добавляем сделки Bitrix по кампаниям
+    // Добавляем Bitrix сделки за день
+    const bxByCamp = {}
     for (const deal of dayDeals) {
-      const key = norm(deal?.utm_campaign || '(без кампании)')
-      if (!campMap.has(key)) {
-        campMap.set(key, { name: deal?.utm_campaign, spend: 0, clicks: 0, leads: 0, deals: 0, paidDeals: 0, revenue: 0 })
-      }
-      const item = campMap.get(key)
-      item.deals++
-      if (isWonStage(deal?.stage)) {
-        item.paidDeals++
-        item.revenue += toNum(deal?.amount)
-      }
+      const key = (deal?.utm_campaign || '').toLowerCase().trim() || '__unknown__'
+      if (!bxByCamp[key]) bxByCamp[key] = []
+      bxByCamp[key].push(deal)
     }
 
-    // Оставляем только кампании, где была активность в этот день
-    const activeItems = Array.from(campMap.values())
-      .filter(i => i.spend > 0 || i.clicks > 0 || i.leads > 0 || i.deals > 0 || i.paidDeals > 0)
-      .map(item => {
-        const crLead = item.clicks > 0 ? ((item.leads / item.clicks) * 100).toFixed(2) : '0,00'
-        const cpl = item.leads > 0 ? (item.spend / item.leads).toFixed(2) : (item.deals > 0 ? (item.spend / item.deals).toFixed(2) : item.spend.toFixed(2))
-        const crPaid = item.leads > 0 ? ((item.paidDeals / item.leads) * 100).toFixed(1) : (item.deals > 0 ? ((item.paidDeals / item.deals) * 100).toFixed(1) : '0')
-
-        return {
-          ...item,
-          crLead,
-          cpl,
-          crPaid,
-        }
+    const items = Array.from(campMap.values())
+      .filter(c => c.spend > 0 || c.metaLeads > 0)
+      .map(c => {
+        const key = c.name.toLowerCase().trim()
+        const deals = bxByCamp[key] || []
+        const paidDeals = deals.filter(d => isWonStage(d?.stage))
+        const revenue = paidDeals.reduce((s, d) => s + toNum(d?.amount), 0)
+        const cpl = c.metaLeads > 0 && c.spend > 0 ? (c.spend / c.metaLeads).toFixed(2) : '—'
+        const ctr = c.impressions > 0 ? ((c.clicks / c.impressions) * 100).toFixed(2) : '0'
+        return { ...c, deals: deals.length, paidDeals: paidDeals.length, revenue, cpl, ctr }
       })
 
-    // Итоговая сумма за день
-    const total = activeItems.reduce((acc, i) => ({
+    // Все Bitrix сделки за день (для итогового блока)
+    const totalBxPaid = dayDeals.filter(d => isWonStage(d?.stage))
+    const totalRevenue = totalBxPaid.reduce((s, d) => s + toNum(d?.amount), 0)
+
+    const totals = items.reduce((acc, i) => ({
       spend: acc.spend + i.spend,
       clicks: acc.clicks + i.clicks,
-      leads: acc.leads + i.leads,
-      paidDeals: acc.paidDeals + i.paidDeals,
-      revenue: acc.revenue + i.revenue,
-    }), { spend: 0, clicks: 0, leads: 0, paidDeals: 0, revenue: 0 })
+      metaLeads: acc.metaLeads + i.metaLeads,
+    }), { spend: 0, clicks: 0, metaLeads: 0 })
 
-    const totalCrLead = total.clicks > 0 ? ((total.leads / total.clicks) * 100).toFixed(2) : '0,00'
-    const totalCpl = total.leads > 0 ? (total.spend / total.leads).toFixed(2) : '0,00'
-    const totalCrPaid = total.leads > 0 ? ((total.paidDeals / total.leads) * 100).toFixed(1) : '0'
+    return { items, bxDeals: dayDeals, hasDailyMeta, totals, totalBxPaid: totalBxPaid.length, totalRevenue }
+  }, [selectedKey, metaRows, bitrixRows])
 
-    return {
-      items: activeItems,
-      total: {
-        ...total,
-        crLead: totalCrLead,
-        cpl: totalCpl,
-        crPaid: totalCrPaid,
-      }
-    }
-  }, [selectedDate, metaRows, bitrixRows, campaigns])
-
-  // Генерация текста точно по вашему формату
+  // Текст отчёта
   const reportText = useMemo(() => {
-    if (!selectedDate) return ''
-    const [y, m, d] = selectedDate.split('-')
-    const formattedDate = `${parseInt(d, 10)}.${parseInt(m, 10)}.${y}`
+    if (!selectedKey) return ''
+    const date = formatRuDate(selectedKey)
+    const isPeriod = !reportData.hasDailyMeta && metaPeriod
+    const periodLabel = isPeriod
+      ? ` (данные Meta за период ${formatRuDate(metaPeriod.from)}–${formatRuDate(metaPeriod.to)})`
+      : ''
 
-    let out = `Отчет по маркетингу ${formattedDate}\n\n`
+    let out = `📊 Отчет по маркетингу ${date}\n`
+    if (isPeriod) out += `⚠️ Meta не содержит разбивки по дням — показаны итоги за весь период\n`
+    out += `\n`
 
-    if (reportData.items.length === 0) {
-      out += `Нет активности за эту дату.`
+    if (reportData.items.length === 0 && reportData.bxDeals.length === 0) {
+      out += `Нет данных за эту дату.`
       return out
     }
 
-    reportData.items.forEach(item => {
-      out += `📍 ${item.name}\n\n`
-      out += `Бюджет: ${item.spend.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} $\n`
-      out += `Клики: ${item.clicks}\n`
-      out += `Конверсия в заявку: ${item.crLead}%\n`
-      out += `Заявок: ${item.leads}\n`
-      out += `Цена заявки: ${item.cpl} $\n`
-      out += `CR% в оплату билета: ${item.crPaid}%\n`
-      out += `Оплат билетов: ${item.paidDeals}\n`
-      out += `На сумму: ${item.revenue.toLocaleString('ru-RU', { minimumFractionDigits: 0 })} $\n\n`
-    })
+    // Meta кампании
+    if (reportData.items.length > 0) {
+      out += `━━━ META ADS${periodLabel} ━━━\n\n`
+      for (const item of reportData.items) {
+        out += `📍 ${item.name}\n`
+        out += `Расход: ${item.spend.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} $\n`
+        out += `Клики: ${item.clicks}  CTR: ${item.ctr}%\n`
+        out += `Лидов (Meta): ${item.metaLeads}  CPL: ${item.cpl} $\n`
+        if (item.deals > 0) out += `Сделок в CRM за день: ${item.deals}\n`
+        out += `\n`
+      }
 
-    if (reportData.total && reportData.items.length > 1) {
-      out += `➖➖➖➖➖➖➖➖\n`
-      out += `📊 ИТОГО ЗА ДЕНЬ:\n\n`
-      out += `Бюджет: ${reportData.total.spend.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} $\n`
-      out += `Клики: ${reportData.total.clicks}\n`
-      out += `Конверсия в заявку: ${reportData.total.crLead}%\n`
-      out += `Заявок: ${reportData.total.leads}\n`
-      out += `Цена заявки: ${reportData.total.cpl} $\n`
-      out += `CR% в оплату билета: ${reportData.total.crPaid}%\n`
-      out += `Оплат билетов: ${reportData.total.paidDeals}\n`
-      out += `На сумму: ${reportData.total.revenue.toLocaleString('ru-RU', { minimumFractionDigits: 0 })} $`
+      const totCpl = reportData.totals.metaLeads > 0 && reportData.totals.spend > 0
+        ? (reportData.totals.spend / reportData.totals.metaLeads).toFixed(2) : '—'
+      if (reportData.items.length > 1) {
+        out += `ИТОГО Meta:\n`
+        out += `Расход: ${reportData.totals.spend.toLocaleString('ru-RU', { minimumFractionDigits: 2 })} $\n`
+        out += `Лидов: ${reportData.totals.metaLeads}  CPL: ${totCpl} $\n\n`
+      }
+    }
+
+    // Bitrix за день
+    if (reportData.bxDeals.length > 0) {
+      out += `━━━ CRM / BITRIX за ${date} ━━━\n\n`
+      out += `Новых сделок: ${reportData.bxDeals.length}\n`
+      out += `Оплат: ${reportData.totalBxPaid}\n`
+      if (reportData.totalRevenue > 0) {
+        out += `Выручка: ${reportData.totalRevenue.toLocaleString('ru-RU')} ₸\n`
+      }
+    } else {
+      out += `━━━ CRM / BITRIX за ${date} ━━━\n\nСделок за этот день: 0\n`
     }
 
     return out.trim()
-  }, [selectedDate, reportData])
+  }, [selectedKey, reportData, metaPeriod])
 
   const handleCopy = () => {
     navigator.clipboard.writeText(reportText)
@@ -207,22 +217,32 @@ export default function DailyReportModal({ isOpen, onClose, metaRows = [], bitri
 
         {/* Body */}
         <div className="p-5 space-y-3.5 overflow-y-auto flex-1">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <label className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
-                Дата отчета:
+          {/* Date Selector с аккуратными понятными датами */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                Выберите день отчета:
               </label>
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="input-base text-xs py-1"
-              />
+              <span className="text-[10px] text-zinc-400">
+                Кампаний: <strong className="text-zinc-800 dark:text-zinc-200">{reportData.items.length} шт</strong>
+              </span>
             </div>
-            <div className="text-right">
-              <span className="text-[10px] text-zinc-400 block uppercase font-semibold">Кампаний в отчете:</span>
-              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">{reportData.items.length} шт</span>
-            </div>
+
+            {availableDates.length > 0 ? (
+              <select
+                value={selectedKey}
+                onChange={e => setSelectedKey(e.target.value)}
+                className="select-base text-xs py-1.5 font-medium"
+              >
+                {availableDates.map(d => (
+                  <option key={d.dateKey} value={d.dateKey}>
+                    {d.formatted} ({d.count} записей)
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-zinc-400">Загрузите файлы со сделками, чтобы выбрать дату</p>
+            )}
           </div>
 
           {/* Formatted Text Box */}
@@ -238,7 +258,7 @@ export default function DailyReportModal({ isOpen, onClose, metaRows = [], bitri
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-3 bg-zinc-50 dark:bg-zinc-800/30 border-t border-zinc-100 dark:border-zinc-800">
-          <span className="text-[11px] text-zinc-400">Нажмите кнопку, чтобы скопировать и сразу вставить в чат</span>
+          <span className="text-[11px] text-zinc-400">Скопируйте и отправьте в чат команды</span>
           <div className="flex gap-2">
             <button onClick={onClose} className="btn-ghost text-xs">
               Закрыть

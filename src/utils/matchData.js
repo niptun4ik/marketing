@@ -67,13 +67,67 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
     adset.totals.leads       += toNum(row?.leads)
   }
 
-  // Группируем Bitrix по ключу матчинга
+  // Хелпер для поиска наиболее подходящей кампании для сделки
+  const metaCampaignKeys = Array.from(metaMap.keys())
+
+  const findBestCampaignKey = (deal) => {
+    // 1. Прямая точная метка utm_campaign
+    const directKey = norm(deal?.utm_campaign)
+    if (directKey && metaMap.has(directKey)) return directKey
+
+    // 2. Поиск по подстроке utm_campaign
+    if (directKey) {
+      const subMatch = metaCampaignKeys.find(k => k.includes(directKey) || directKey.includes(k))
+      if (subMatch) return subMatch
+    }
+
+    // 3. Умный поиск по formname, названию сделки или источнику
+    const combinedText = norm([
+      deal?.formname,
+      deal?.deal_name,
+      deal?.utm_source,
+      deal?.utm_content,
+      deal?.['Название сделки'],
+      deal?.['formname'],
+      deal?.['Дополнительно об источнике'],
+    ].filter(Boolean).join(' '))
+
+    if (combinedText) {
+      // Ищем совпадение среди реальных кампаний Meta
+      for (const campKey of metaCampaignKeys) {
+        // Очищаем от мусорных слов типа "лендинг", "лиды", "тест"
+        const cleanKey = campKey.replace(/[|()—–\-_]/g, ' ').replace(/\s+/g, ' ').trim()
+        const words = cleanKey.split(' ').filter(w => w.length > 3)
+        // Если ключевые слова (например "отношения", "моп", "астана") встречаются в сделке
+        const matchCount = words.filter(w => combinedText.includes(w)).length
+        if (words.length > 0 && matchCount >= Math.min(2, words.length)) {
+          return campKey
+        }
+      }
+
+      // Специальные распространенные маркеры
+      if (combinedText.includes('отношен')) {
+        const otnoshCamp = metaCampaignKeys.find(k => k.includes('отношен'))
+        if (otnoshCamp) return otnoshCamp
+      }
+      if (combinedText.includes('моп')) {
+        const mopCamp = metaCampaignKeys.find(k => k.includes('моп'))
+        if (mopCamp) return mopCamp
+      }
+    }
+
+    // Если у нас в Meta вообще всего 1 кампания, и сделка пришла из таргета/формы
+    if (metaCampaignKeys.length === 1 && (combinedText.includes('форма') || combinedText.includes('сайт') || combinedText.includes('таргет') || !deal?.utm_campaign)) {
+      return metaCampaignKeys[0]
+    }
+
+    return directKey || '(без кампании)'
+  }
+
+  // Группируем Bitrix по найденному ключу
   const bitrixMap = new Map()
   for (const deal of bitrixRows || []) {
-    const key = matchKey === 'campaign'
-      ? norm(deal?.utm_campaign)
-      : norm(deal?.utm_content || deal?.utm_campaign)
-
+    const key = findBestCampaignKey(deal)
     if (!bitrixMap.has(key)) bitrixMap.set(key, [])
     bitrixMap.get(key).push(deal)
   }
@@ -98,10 +152,10 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
     })
   }
 
-  // Добавляем Bitrix-сделки без пары в Meta (неопознанные)
+  // Добавляем действительно нераспознанные Bitrix-сделки
   for (const [bxKey, deals] of bitrixMap) {
     if (!metaMap.has(bxKey)) {
-      const campName = deals[0]?.utm_campaign || bxKey || '(без кампании)'
+      const campName = deals[0]?.utm_campaign || (bxKey !== '(без кампании)' ? bxKey : '(без кампании)')
       campaigns.push({
         campaign_name: String(campName),
         adsets: [],
@@ -171,18 +225,21 @@ export function buildDailyChartData(campaigns = []) {
     if (!raw) return null
     if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().split('T')[0]
     const s = String(raw).trim()
-    // ISO формат YYYY-MM-DD
-    const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
-    if (isoMatch) {
-      const [, y, m, d] = isoMatch
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    }
-    // Формат DD.MM.YYYY или DD/MM/YYYY
+
+    // 1. Русский формат DD.MM.YYYY (первое число ДЕНЬ, второе МЕСЯЦ)
     const ruMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
     if (ruMatch) {
       const [, d, m, y] = ruMatch
       return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
     }
+
+    // 2. ISO формат YYYY-MM-DD
+    const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+    if (isoMatch) {
+      const [, y, m, d] = isoMatch
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    }
+
     return s.slice(0, 10)
   }
 
