@@ -7,10 +7,12 @@ import Dashboard from './components/Dashboard'
 import Auth from './components/Auth'
 import HistoryModal from './components/HistoryModal'
 import SettingsModal from './components/SettingsModal'
+import ShareModal from './components/ShareModal'
 import ErrorBoundary from './components/ErrorBoundary'
 import { parseFile, applyMapping, autoDetectMapping } from './hooks/useFileParser'
 import { useLocalStorage, clearLocalStorage } from './hooks/useLocalStorage'
 import { supabase } from './supabaseClient'
+import { decodeReportPayload } from './utils/shareUtils'
 import {
   DEMO_META_ROWS, DEMO_BITRIX_ROWS,
   META_FIELD_ALIASES, BITRIX_FIELD_ALIASES,
@@ -72,9 +74,14 @@ export default function App() {
   // ─── Session persistence (Local) ──────────────────────────────────────────
   const [localSession, setLocalSession] = useLocalStorage(LS_KEY, null)
 
-  // ─── Modals ────────────────────────────────────────────────────────
+  // ─── Modals & View States ──────────────────────────────────────────
   const [showHistory, setShowHistory] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [showShare, setShowShare] = useState(false)
+  const [isSharedView, setIsSharedView] = useState(false)
+
+  // ─── Autonomous Guest Mode ────────────────────────────────────────────────
+  const [isGuest, setIsGuest] = useLocalStorage('mkt-guest-mode', false)
 
   // ─── Raw parsed rows ──────────────────────────────────────────────────────
   const [metaRaw, setMetaRaw]       = useState(null)   
@@ -114,6 +121,42 @@ export default function App() {
       setLocalSession({ metaRows, bitrixRows, metaFile, bitrixFile, isDemo })
     }
   }, [metaRows, bitrixRows, metaFile, bitrixFile, isDemo])
+
+  // ─── Decode shared link payload from URL (#share=... or ?share=...) ───────
+  useEffect(() => {
+    async function checkSharedLink() {
+      let shareStr = ''
+      if (window.location.hash) {
+        const match = window.location.hash.match(/[#&]share=([^&]+)/)
+        if (match) shareStr = match[1]
+      }
+      if (!shareStr && window.location.search) {
+        const params = new URLSearchParams(window.location.search)
+        shareStr = params.get('share') || ''
+      }
+
+      if (!shareStr) return
+
+      try {
+        const decoded = await decodeReportPayload(shareStr)
+        if (decoded && (decoded.metaRows?.length || decoded.bitrixRows?.length)) {
+          setMetaRows(decoded.metaRows || [])
+          setBitrixRows(healBitrixRows(decoded.bitrixRows) || [])
+          if (decoded.metaFile) setMetaFile(decoded.metaFile)
+          if (decoded.bitrixFile) setBitrixFile(decoded.bitrixFile)
+          setIsSharedView(true)
+          setIsGuest(true)
+        }
+      } catch (err) {
+        console.error('Ошибка при распаковке отчёта из ссылки:', err)
+      }
+    }
+
+    checkSharedLink()
+
+    window.addEventListener('hashchange', checkSharedLink)
+    return () => window.removeEventListener('hashchange', checkSharedLink)
+  }, [])
 
   // ─── File handlers ────────────────────────────────────────────────────────
   async function handleMetaFile(file) {
@@ -213,6 +256,10 @@ export default function App() {
     setMetaRaw(null);  setBitrixRaw(null)
     setMetaError(null); setBitrixError(null)
     setIsDemo(false)
+    setIsSharedView(false)
+    if (window.location.hash && window.location.hash.includes('share=')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    }
     clearLocalStorage(LS_KEY)
     setLocalSession(null)
   }
@@ -225,6 +272,7 @@ export default function App() {
     )
   }
 
+  const effectiveSession = session || (isGuest ? { isGuest: true, user: { id: 'guest', email: 'guest@marketing.local' } } : null)
   const showDashboard = metaRows && bitrixRows
 
   return (
@@ -233,13 +281,16 @@ export default function App() {
         darkMode={darkMode}
         onToggleDark={() => setDarkMode((d) => !d)}
         onReset={showDashboard ? handleReset : null}
-        session={session}
+        session={effectiveSession}
         onOpenHistory={() => setShowHistory(true)}
         onOpenSettings={() => setShowSettings(true)}
+        onOpenShare={showDashboard ? () => setShowShare(true) : null}
+        onLoginClick={isGuest ? () => setIsGuest(false) : null}
+        isSharedView={isSharedView}
       />
 
-      {!session ? (
-        <Auth />
+      {!effectiveSession ? (
+        <Auth onContinueAutonomous={() => setIsGuest(true)} />
       ) : (
         <>
           {!showDashboard ? (
@@ -258,7 +309,12 @@ export default function App() {
             />
           ) : (
             <ErrorBoundary>
-              <Dashboard metaRows={metaRows} bitrixRows={bitrixRows} session={session} />
+              <Dashboard
+                metaRows={metaRows}
+                bitrixRows={bitrixRows}
+                session={effectiveSession}
+                onOpenShare={() => setShowShare(true)}
+              />
             </ErrorBoundary>
           )}
 
@@ -279,14 +335,24 @@ export default function App() {
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
             onLoadHistory={handleLoadHistory}
-            session={session}
+            session={effectiveSession}
           />
 
           {/* Settings Modal */}
           <SettingsModal
             isOpen={showSettings}
             onClose={() => setShowSettings(false)}
-            session={session}
+            session={effectiveSession}
+          />
+
+          {/* Share Modal */}
+          <ShareModal
+            isOpen={showShare}
+            onClose={() => setShowShare(false)}
+            metaRows={metaRows}
+            bitrixRows={bitrixRows}
+            metaFile={metaFile}
+            bitrixFile={bitrixFile}
           />
         </>
       )}

@@ -9,7 +9,7 @@ import PlanFactPanel from './PlanFactPanel'
 import DailyReportModal from './DailyReportModal'
 import CRMTab from './CRMTab'
 import InsightsStrip from './InsightsStrip'
-import { FileText } from 'lucide-react'
+import { FileText, Share2 } from 'lucide-react'
 import {
   matchAndAggregate,
   computeTotals,
@@ -32,7 +32,7 @@ const DEFAULT_FILTERS = {
   hiddenCampaigns: [],
 }
 
-export default function Dashboard({ metaRows, bitrixRows, session }) {
+export default function Dashboard({ metaRows, bitrixRows, session, onOpenShare }) {
   const [matchKey, setMatchKey] = useState('campaign')
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [margin, setMargin] = useState(30)
@@ -144,6 +144,16 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
         <div className="flex items-center gap-2">
           {activeTab === 'meta' && (
             <>
+              {onOpenShare && (
+                <button
+                  onClick={onOpenShare}
+                  className="btn-secondary flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400 border-indigo-200/80 dark:border-indigo-900/60 hover:bg-indigo-50 dark:hover:bg-indigo-950/30"
+                  title="Скопировать ссылку на этот отчет для начальника"
+                >
+                  <Share2 size={13} />
+                  <span>Поделиться ссылкой</span>
+                </button>
+              )}
               <button
                 onClick={() => setShowDailyReport(true)}
                 className="btn-secondary flex items-center gap-1.5"

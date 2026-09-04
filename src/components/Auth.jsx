@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase, isSupabaseConfigured } from '../supabaseClient'
-import { User, Lock, LogIn, UserPlus, AlertTriangle, Bug } from 'lucide-react'
+import { User, Lock, LogIn, UserPlus, AlertTriangle, Bug, ShieldCheck } from 'lucide-react'
 
 const debugUrl = import.meta.env.VITE_SUPABASE_URL
 const debugKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
@@ -21,7 +21,7 @@ const toFakeEmail = (login) => {
   return `${safe || 'user'}@marketing.local`
 }
 
-export default function Auth() {
+export default function Auth({ onContinueAutonomous }) {
   const [loading, setLoading]   = useState(false)
   const [isLogin, setIsLogin]   = useState(true)
   const [login, setLogin]       = useState('')
@@ -153,7 +153,34 @@ export default function Auth() {
           </button>
         </form>
 
-        <div className="mt-6 text-center space-y-2">
+        {/* Разделитель ИЛИ */}
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-200 dark:border-gray-800" />
+          </div>
+          <div className="relative flex justify-center text-[10px] uppercase">
+            <span className="bg-white dark:bg-gray-900 px-2 text-gray-400 font-medium tracking-wider">или</span>
+          </div>
+        </div>
+
+        {/* Кнопка автономного режима */}
+        {onContinueAutonomous && (
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={onContinueAutonomous}
+              className="w-full py-2.5 px-3.5 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20 text-gray-800 dark:text-gray-200 transition-all text-xs font-semibold flex items-center justify-center gap-2 group shadow-sm hover:shadow"
+            >
+              <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
+              <span>Работать автономно (без регистрации)</span>
+            </button>
+            <p className="text-[10px] text-gray-400 text-center leading-relaxed">
+              Все файлы обрабатываются локально в браузере. Вы сможете войти позже.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 text-center space-y-2">
           <button
             type="button"
             onClick={() => { setIsLogin(!isLogin); setError(null) }}
