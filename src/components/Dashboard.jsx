@@ -6,8 +6,9 @@ import DashboardCharts from './DashboardCharts'
 import AnalyticsTable from './AnalyticsTable'
 import ExportButton from './ExportButton'
 import PlanFactPanel from './PlanFactPanel'
-import DailyReportModal, { parseDateKey } from './DailyReportModal'
+import DailyReportModal from './DailyReportModal'
 import CRMTab from './CRMTab'
+import InsightsStrip from './InsightsStrip'
 import { FileText } from 'lucide-react'
 import {
   matchAndAggregate,
@@ -16,6 +17,10 @@ import {
   buildCampaignChartData,
   buildDailyChartData,
   buildFunnelData,
+  parseDateKey,
+  extractMetaDateKey,
+  extractMetaDateRange,
+  extractBitrixDateKey,
 } from '../utils/matchData'
 import { supabase } from '../supabaseClient'
 
@@ -49,14 +54,16 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       })
   }, [session])
 
-  // Фильтруем Meta по выбранному периоду дат
+  // Фильтруем Meta по выбранному периоду дат (пересечение отрезков [start, end] и [dateFrom, dateTo])
   const filteredMeta = useMemo(() => {
     if (!filters.dateFrom && !filters.dateTo) return metaRows || []
     return (metaRows || []).filter((row) => {
-      const d = parseDateKey(row?.date)
-      if (!d) return true
-      if (filters.dateFrom && d < filters.dateFrom) return false
-      if (filters.dateTo   && d > filters.dateTo)   return false
+      const range = extractMetaDateRange(row)
+      if (!range?.start) return true
+      const start = range.start
+      const end = range.end || start
+      if (filters.dateFrom && end < filters.dateFrom) return false
+      if (filters.dateTo   && start > filters.dateTo) return false
       return true
     })
   }, [metaRows, filters.dateFrom, filters.dateTo])
@@ -64,7 +71,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   // Фильтруем Bitrix по дате (через точный русский/ISO парсер) и стадии
   const filteredBitrix = useMemo(() => {
     return (bitrixRows || []).filter((deal) => {
-      const d = parseDateKey(deal?.created_date)
+      const d = extractBitrixDateKey(deal)
       if (filters.dateFrom && d && d < filters.dateFrom) return false
       if (filters.dateTo   && d && d > filters.dateTo)   return false
       const stage = String(deal?.stage || '').trim()
@@ -76,10 +83,10 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
     })
   }, [bitrixRows, filters])
 
-  // Match + aggregate с учётом актуального курса $
+  // Match + aggregate с учётом актуального курса $ и маржи
   const campaigns = useMemo(
-    () => matchAndAggregate(filteredMeta, filteredBitrix, matchKey, usdRate),
-    [filteredMeta, filteredBitrix, matchKey, usdRate]
+    () => matchAndAggregate(filteredMeta, filteredBitrix, matchKey, usdRate, margin / 100),
+    [filteredMeta, filteredBitrix, matchKey, usdRate, margin]
   )
 
   // Search filter on campaign level
@@ -113,8 +120,8 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
 
   const chartData = useMemo(() => ({
     campaignData: buildCampaignChartData(filteredCampaigns),
-    dailyData:    buildDailyChartData(filteredCampaigns),
-  }), [filteredCampaigns])
+    dailyData:    buildDailyChartData(filteredCampaigns, filters.dateFrom, filters.dateTo),
+  }), [filteredCampaigns, filters.dateFrom, filters.dateTo])
 
   const funnelData = useMemo(
     () => buildFunnelData(totals, allBxDeals, stageOrder),
@@ -188,6 +195,9 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
           {/* Plan-Fact */}
           <PlanFactPanel totals={totals} />
 
+          {/* Quick Insights & Anomalies (Linear Style) */}
+          <InsightsStrip campaigns={filteredCampaigns} totals={totals} usdRate={usdRate} />
+
           {/* Filters */}
           <FiltersBar filters={filters} onChange={setFilters} />
 
@@ -228,9 +238,11 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
         isOpen={showDailyReport}
         onClose={() => setShowDailyReport(false)}
         metaRows={metaRows}
-        bitrixRows={filteredBitrix}
+        bitrixRows={allBxDeals}
         campaigns={filteredCampaigns}
         totals={totals}
+        usdRate={usdRate}
+        hiddenCampaigns={filters.hiddenCampaigns || []}
       />
     </div>
   )

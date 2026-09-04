@@ -33,35 +33,38 @@ const COLUMNS = [
 
 function renderCell(col, metrics, isTotal = false) {
   const v = metrics[col.key]
+  let content = '—'
   switch (col.key) {
-    case 'impressions': return fmt(v, {})
-    case 'clicks':      return fmt(v, {})
-    case 'metaLeads':   return fmt(v, {})
-    case 'bxLeads':     return fmt(v, {})
-    case 'wonDeals':    return fmt(v, {})
-    case 'ctr':         return fmt(v, { style: 'percent', dec: 2 })
-    case 'metaCr':      return fmt(v, { style: 'percent', dec: 2 })
-    case 'bxCr':        return fmt(v, { style: 'percent', dec: 2 })
-    case 'winRate':     return fmt(v, { style: 'percent', dec: 1 })
-    case 'roas':        return (
-      <span className={v >= 100 ? 'text-green-500 font-semibold' : v < 0 ? 'text-red-500 font-semibold' : ''}>
-        {fmt(v, { style: 'percent', dec: 1 })}
-      </span>
-    )
-    case 'spend':   return fmt(v, { style: 'currency' })
-    case 'revenue': return v > 0 ? `${Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₸` : (v === 0 ? '0 ₸' : '—')
-    case 'cpl':     return fmt(v, { style: 'currency' })
-    case 'metaCpl': return fmt(v, { style: 'currency' })
-    case 'cpc':     return fmt(v, { style: 'currency' })
-    case 'cpo':     return fmt(v, { style: 'currency' })
-    case 'cpm':     return fmt(v, { style: 'currency' })
-    default:        return '—'
+    case 'impressions': content = fmt(v, {}); break
+    case 'clicks':      content = fmt(v, {}); break
+    case 'metaLeads':   content = fmt(v, {}); break
+    case 'bxLeads':     content = fmt(v, {}); break
+    case 'wonDeals':    content = fmt(v, {}); break
+    case 'ctr':         content = fmt(v, { style: 'percent', dec: 2 }); break
+    case 'metaCr':      content = fmt(v, { style: 'percent', dec: 2 }); break
+    case 'bxCr':        content = fmt(v, { style: 'percent', dec: 2 }); break
+    case 'winRate':     content = fmt(v, { style: 'percent', dec: 1 }); break
+    case 'roas':
+      return (
+        <span className={`font-mono tabular-nums font-semibold ${v >= 100 ? 'text-emerald-600 dark:text-emerald-400' : v < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-600 dark:text-zinc-400'}`}>
+          {fmt(v, { style: 'percent', dec: 1 })}
+        </span>
+      )
+    case 'spend':   content = fmt(v, { style: 'currency' }); break
+    case 'revenue': content = v > 0 ? `${Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₸` : (v === 0 ? '0 ₸' : '—'); break
+    case 'cpl':     content = fmt(v, { style: 'currency' }); break
+    case 'metaCpl': content = fmt(v, { style: 'currency' }); break
+    case 'cpc':     content = fmt(v, { style: 'currency' }); break
+    case 'cpo':     content = fmt(v, { style: 'currency' }); break
+    case 'cpm':     content = fmt(v, { style: 'currency' }); break
+    default:        content = '—'
   }
+  return <span className="font-mono tabular-nums tracking-tight">{content}</span>
 }
 
 function rowBg(status) {
-  if (status === 'green') return 'bg-emerald-50/40 dark:bg-emerald-950/15'
-  if (status === 'red')   return 'bg-rose-50/40 dark:bg-rose-950/15'
+  if (status === 'green') return 'bg-emerald-50/20 dark:bg-emerald-950/10'
+  if (status === 'red')   return 'bg-rose-50/20 dark:bg-rose-950/10'
   return ''
 }
 
@@ -193,7 +196,12 @@ function CampaignRow({ campaign, onHide, plans, onPlanChange, isSaving }) {
             }
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 truncate">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  m.rowStatus === 'green' ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]' :
+                  m.rowStatus === 'red' ? 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.4)]' :
+                  'bg-zinc-300 dark:bg-zinc-600'
+                }`} />
+                <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 truncate">
                   {name}
                 </p>
                 {hasPlan && (
@@ -377,9 +385,9 @@ export default function AnalyticsTable({ campaigns, totals, onHideCampaign, sess
 
   return (
     <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200/80 dark:border-zinc-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.04)] overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead className="bg-zinc-50/80 dark:bg-zinc-800/40 border-b border-zinc-200 dark:border-zinc-800">
+      <div className="overflow-x-auto max-h-[720px] overflow-y-auto">
+        <table className="w-full border-collapse">
+          <thead className="sticky top-0 z-20 bg-zinc-50/95 dark:bg-zinc-900/95 backdrop-blur-md border-b border-zinc-200 dark:border-zinc-800 shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
             <tr>
               {COLUMNS.map((col) => (
                 <th

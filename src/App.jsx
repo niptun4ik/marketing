@@ -18,6 +18,33 @@ import {
 
 const LS_KEY = 'mkt-analytics-session'
 
+function healBitrixRows(rows) {
+  if (!Array.isArray(rows)) return rows
+  return rows.map(row => {
+    const healed = { ...row }
+    for (const [k, v] of Object.entries(healed)) {
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) {
+        const m = v.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/)
+        if (m) {
+          const [, y, mm, dd, rest] = m
+          const yNum = parseInt(y, 10)
+          const mNum = parseInt(mm, 10)
+          const dNum = parseInt(dd, 10)
+          let shouldSwap = false
+          if (yNum === 2026 && mNum > 9 && dNum <= 12) shouldSwap = true
+          else if (yNum === 2026 && mNum <= 3 && (dNum === 8 || dNum === 9)) shouldSwap = true
+          else if (yNum === 2026 && mNum >= 5 && mNum <= 7 && dNum === 8) shouldSwap = true
+
+          if (shouldSwap) {
+            healed[k] = `${y}-${String(dNum).padStart(2, '0')}-${String(mNum).padStart(2, '0')}${rest}`
+          }
+        }
+      }
+    }
+    return healed
+  })
+}
+
 export default function App() {
   // ─── Auth Session ────────────────────────────────────────────────────────
   const [session, setSession] = useState(null)
@@ -65,9 +92,15 @@ export default function App() {
   const [modal, setModal] = useState(null) 
 
   // ─── Mapped rows (ready for dashboard) ───────────────────────────────────
-  const [metaRows,   setMetaRows]   = useState(localSession?.metaRows   || null)
-  const [bitrixRows, setBitrixRows] = useState(localSession?.bitrixRows || null)
   const [isDemo, setIsDemo] = useState(localSession?.isDemo || false)
+  const [metaRows, setMetaRows] = useState(() => {
+    if (localSession?.isDemo) return DEMO_META_ROWS
+    return localSession?.metaRows || null
+  })
+  const [bitrixRows, setBitrixRows] = useState(() => {
+    if (localSession?.isDemo) return DEMO_BITRIX_ROWS
+    return healBitrixRows(localSession?.bitrixRows) || null
+  })
 
   // ─── Restore file labels from local session ────────────────────────────────────
   useEffect(() => {

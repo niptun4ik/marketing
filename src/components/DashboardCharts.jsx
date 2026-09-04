@@ -4,15 +4,44 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { useState } from 'react'
+import { Info } from 'lucide-react'
 import FunnelEditor from './FunnelEditor'
 
-// Сдержанные, элегантные цвета вместо "кислотных"
+// Сдержанные, элегантные цвета
 const COLORS = {
   spend:     '#71717a', // zinc-500
   revenue:   '#10b981', // emerald-500
   metaLeads: '#3b82f6', // blue-500
   bxLeads:   '#6366f1', // indigo-500
   cpl:       '#f59e0b', // amber-500
+}
+
+const MONTHS_RU_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const MONTHS_RU_FULL = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+]
+
+const formatRuTick = (raw) => {
+  if (!raw) return ''
+  const parts = String(raw).split('-')
+  if (parts.length === 3) {
+    const [, m, d] = parts
+    const mIdx = parseInt(m, 10) - 1
+    return `${parseInt(d, 10)} ${MONTHS_RU_SHORT[mIdx] || m}`
+  }
+  return raw
+}
+
+const formatRuFullDate = (raw) => {
+  if (!raw) return ''
+  const parts = String(raw).split('-')
+  if (parts.length === 3) {
+    const [y, m, d] = parts
+    const mIdx = parseInt(m, 10) - 1
+    return `${parseInt(d, 10)} ${MONTHS_RU_FULL[mIdx] || m} ${y} г.`
+  }
+  return raw
 }
 
 const fmtK = (v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(Math.round(v || 0))
@@ -41,6 +70,125 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
+/** Детальная плавающая карточка для графика по дням */
+const DailyTooltip = ({ active, payload, activeMetric }) => {
+  if (!active || !payload?.length) return null
+  const day = payload[0]?.payload
+  if (!day) return null
+
+  const dateFormatted = formatRuFullDate(day.date)
+  const isCrmOnly = day.spend === 0 && day.bxLeads > 0
+  const isMetaOnly = day.spend > 0 && day.bxLeads === 0
+  const isBoth = day.spend > 0 && day.bxLeads > 0
+  const hasMetaSummary = !day.hasDailyMetaBreakdown && day.totalMetaSpend > 0
+
+  return (
+    <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-xl shadow-xl p-3 text-xs min-w-[250px] space-y-2 pointer-events-none select-none">
+      <div className="border-b border-zinc-100 dark:border-zinc-800 pb-1.5 flex items-center justify-between gap-2">
+        <span className="font-semibold text-zinc-900 dark:text-zinc-100">{dateFormatted}</span>
+        {isBoth ? (
+          <span className="text-[9px] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-900/60 px-1.5 py-0.5 rounded font-medium">
+            Meta + CRM
+          </span>
+        ) : isMetaOnly ? (
+          <span className="text-[9px] bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60 px-1.5 py-0.5 rounded font-medium">
+            Meta Ads
+          </span>
+        ) : (
+          <span className="text-[9px] bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-900/60 px-1.5 py-0.5 rounded font-medium">
+            Лиды CRM
+          </span>
+        )}
+      </div>
+
+      <div className="space-y-1.5 text-[11px]">
+        {/* Расход Meta */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'spend' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.spend }} />
+            Расход Meta {day.isDistributed ? '(день)*' : 'за день'}:
+          </span>
+          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
+            {day.spend > 0 ? `$${Number(day.spend).toFixed(2)}` : '$0.00'}
+          </span>
+        </div>
+
+        {/* Клики и Показы Meta */}
+        {(day.clicks > 0 || day.impressions > 0) && (
+          <div className="flex justify-between items-center py-0.5 px-1.5 text-zinc-400 text-[10px]">
+            <span>Клики / Показы:</span>
+            <span className="font-mono text-zinc-600 dark:text-zinc-300">
+              {day.clicks || 0} кл. / {day.impressions || 0} пок.
+            </span>
+          </div>
+        )}
+
+        {/* Заявки Meta */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'metaLeads' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.metaLeads }} />
+            Заявки (Meta):
+          </span>
+          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
+            {Number(day.metaLeads || 0).toLocaleString('ru-RU')}
+          </span>
+        </div>
+
+        {/* Лиды CRM */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'bxLeads' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.bxLeads }} />
+            Лиды Bitrix (CRM):
+          </span>
+          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
+            {Number(day.bxLeads || 0).toLocaleString('ru-RU')}
+          </span>
+        </div>
+
+        {/* Оплаты CRM */}
+        <div className={`flex justify-between items-center py-0.5 px-1.5 rounded ${activeMetric === 'wonDeals' ? 'bg-zinc-100 dark:bg-zinc-800/80 font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.revenue }} />
+            Оплаты (продажи):
+          </span>
+          <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
+            {day.wonDeals || 0}
+            {day.revenue > 0 ? ` (${Number(day.revenue).toLocaleString('ru-RU')} ₸)` : ''}
+          </span>
+        </div>
+
+        {/* CPL */}
+        <div className={`flex justify-between items-center pt-1 border-t border-zinc-100 dark:border-zinc-800 px-1.5 ${activeMetric === 'cpl' ? 'bg-amber-50/60 dark:bg-amber-950/20 rounded font-medium' : ''}`}>
+          <span className="text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: COLORS.cpl }} />
+            CPL (цена лида):
+          </span>
+          <span className="font-bold font-mono text-amber-600 dark:text-amber-400">
+            {day.cpl != null ? `$${Number(day.cpl).toFixed(2)}` : '—'}
+          </span>
+        </div>
+
+        {/* Сноска о распределении */}
+        {day.isDistributed && (
+          <div className="pt-1 text-[9px] text-zinc-400 italic">
+            * Выгрузка Meta за период: расход распределён равномерно по дням активности кампании.
+          </div>
+        )}
+
+        {/* Если Meta выгружена за период, показываем общие данные кампании */}
+        {hasMetaSummary && !day.isDistributed && (
+          <div className="pt-1.5 border-t border-zinc-100 dark:border-zinc-800 text-[10px] text-zinc-400">
+            <div className="flex justify-between items-center">
+              <span>Кампания Meta (общий):</span>
+              <span className="font-mono text-zinc-600 dark:text-zinc-300 font-medium">${day.totalMetaSpend} ({day.totalMetaLeads} лид.)</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // --- График Расходы / Выручка по кампаниям ---
 function SpendRevenueChart({ data }) {
   if (!data?.campaignData?.length) return (
@@ -53,7 +201,7 @@ function SpendRevenueChart({ data }) {
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false} />
         <YAxis yAxisId="spend" tickFormatter={v => `$${fmtK(v)}`} tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false} width={45} />
         <YAxis yAxisId="revenue" orientation="right" tickFormatter={v => `${fmtK(v)}₸`} tick={{ fontSize: 10, fill: '#10b981' }} axisLine={false} tickLine={false} width={45} />
-        <Tooltip content={<CustomTooltip />} />
+        <Tooltip content={<CustomTooltip />} wrapperStyle={{ zIndex: 100, outline: 'none' }} />
         <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
         <Bar yAxisId="spend" dataKey="spend"   name="Расход ($)"  fill={COLORS.spend}   radius={[3,3,0,0]} maxBarSize={24} />
         <Bar yAxisId="revenue" dataKey="revenue" name="Выручка (₸)" fill={COLORS.revenue} radius={[3,3,0,0]} maxBarSize={24} />
@@ -64,14 +212,17 @@ function SpendRevenueChart({ data }) {
 
 // --- График по дням ---
 const DAILY_METRICS = [
-  { key: 'spend',     label: 'Расход ($)',    color: COLORS.spend,     type: 'bar'  },
-  { key: 'metaLeads', label: 'Заявки (Meta)', color: COLORS.metaLeads, type: 'line' },
-  { key: 'bxLeads',   label: 'Лиды CRM',      color: COLORS.bxLeads,   type: 'line' },
-  { key: 'cpl',       label: 'CPL ($)',       color: COLORS.cpl,       type: 'line' },
+  { key: 'spend',     label: 'Расход ($)',     color: COLORS.spend,     type: 'bar'  },
+  { key: 'metaLeads', label: 'Заявки (Meta)',  color: COLORS.metaLeads, type: 'line' },
+  { key: 'bxLeads',   label: 'Лиды CRM',       color: COLORS.bxLeads,   type: 'line' },
+  { key: 'wonDeals',  label: 'Оплаты (CRM)',   color: COLORS.revenue,   type: 'bar'  },
+  { key: 'cpl',       label: 'CPL ($)',        color: COLORS.cpl,       type: 'line' },
 ]
 
 function DailyChart({ dailyData }) {
-  const [metric, setMetric] = useState('spend')
+  const hasAnySpend = (dailyData || []).some(d => d.spend > 0)
+  const defaultMetric = hasAnySpend ? 'spend' : 'bxLeads'
+  const [metric, setMetric] = useState(defaultMetric)
 
   if (!dailyData?.length) return (
     <div className="flex items-center justify-center h-48 text-zinc-400 text-xs">
@@ -80,6 +231,9 @@ function DailyChart({ dailyData }) {
   )
 
   const m = DAILY_METRICS.find(d => d.key === metric)
+  const hasAnyCpl = dailyData.some(d => d.cpl != null)
+  const hasCrmOnlyDays = dailyData.some(d => d.spend === 0 && d.bxLeads > 0)
+  const totalMetaSpend = dailyData[0]?.totalMetaSpend || 0
 
   return (
     <div>
@@ -90,7 +244,7 @@ function DailyChart({ dailyData }) {
             onClick={() => setMetric(d.key)}
             className={`text-[11px] px-2.5 py-1 rounded-md transition-all ${
               metric === d.key
-                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-medium'
+                ? 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-medium shadow-sm'
                 : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
             }`}
           >
@@ -98,46 +252,85 @@ function DailyChart({ dailyData }) {
           </button>
         ))}
       </div>
-      <ResponsiveContainer width="100%" height={210}>
-        {m?.type === 'bar' ? (
-          <BarChart data={dailyData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
-            <YAxis
-              tickFormatter={v => (m.key === 'spend' || m.key === 'cpl') ? `$${fmtK(v)}` : fmtK(v)}
-              tick={{ fontSize: 9, fill: '#71717a' }}
-              axisLine={false}
-              tickLine={false}
-              width={45}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey={m.key} name={m.label} fill={m.color} radius={[3,3,0,0]} maxBarSize={24} />
-          </BarChart>
-        ) : (
-          <LineChart data={dailyData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
-            <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
-            <YAxis
-              tickFormatter={v => (m.key === 'spend' || m.key === 'cpl') ? `$${fmtK(v)}` : fmtK(v)}
-              tick={{ fontSize: 9, fill: '#71717a' }}
-              axisLine={false}
-              tickLine={false}
-              width={45}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Line
-              type="monotone"
-              dataKey={m.key}
-              name={m.label}
-              stroke={m.color}
-              strokeWidth={1.75}
-              dot={{ r: 2.5, fill: m.color }}
-              activeDot={{ r: 4 }}
-              connectNulls={false}
-            />
-          </LineChart>
-        )}
-      </ResponsiveContainer>
+
+      {metric === 'spend' && !hasAnySpend ? (
+        <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 space-y-2">
+          <p className="font-semibold text-zinc-800 dark:text-zinc-200 text-xs">В выгрузке Meta Ads нет посуточной разбивки расходов</p>
+          <p className="text-[11px] text-zinc-500 dark:text-zinc-400 max-w-md">
+            Рекламные расходы экспортированы общей суммой за весь период ({totalMetaSpend > 0 ? `$${totalMetaSpend.toFixed(2)}` : 'кампании'}). Для анализа динамики по дням рекомендуем смотреть метрику «Лиды CRM» или «Оплаты (CRM)».
+          </p>
+          <button
+            onClick={() => setMetric('bxLeads')}
+            className="text-[11px] font-medium bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-3 py-1 rounded-md hover:opacity-90 transition-opacity"
+          >
+            Показать динамику лидов CRM
+          </button>
+        </div>
+      ) : metric === 'cpl' && !hasAnyCpl ? (
+        <div className="flex flex-col items-center justify-center h-48 text-zinc-400 text-xs text-center p-4 bg-zinc-50 dark:bg-zinc-800/30 rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800">
+          <p className="font-medium text-zinc-600 dark:text-zinc-300 mb-1">Нет посуточных данных по CPL</p>
+          <p className="text-[11px] text-zinc-400 max-w-sm">
+            В выгрузке Meta Ads расходы указаны за общий период без разбивки по дням. Посуточный CPL рассчитывается только для дней с зафиксированным расходом.
+          </p>
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={210}>
+          {m?.type === 'bar' ? (
+            <BarChart data={dailyData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={formatRuTick} tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={v => m.key === 'spend' ? `$${fmtK(v)}` : fmtK(v)}
+                tick={{ fontSize: 9, fill: '#71717a' }}
+                axisLine={false}
+                tickLine={false}
+                width={45}
+              />
+              <Tooltip content={<DailyTooltip activeMetric={metric} />} allowEscapeViewBox={{ x: true, y: true }} wrapperStyle={{ zIndex: 100, pointerEvents: 'none', outline: 'none' }} />
+              <Bar dataKey={m.key} name={m.label} fill={m.color} radius={[3,3,0,0]} maxBarSize={24} />
+            </BarChart>
+          ) : (
+            <LineChart data={dailyData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
+              <XAxis dataKey="date" tickFormatter={formatRuTick} tick={{ fontSize: 9, fill: '#71717a' }} axisLine={false} tickLine={false} />
+              <YAxis
+                tickFormatter={v => m.key === 'cpl' ? `$${fmtK(v)}` : fmtK(v)}
+                tick={{ fontSize: 9, fill: '#71717a' }}
+                axisLine={false}
+                tickLine={false}
+                width={45}
+              />
+              <Tooltip content={<DailyTooltip activeMetric={metric} />} allowEscapeViewBox={{ x: true, y: true }} wrapperStyle={{ zIndex: 100, pointerEvents: 'none', outline: 'none' }} />
+              <Line
+                type="monotone"
+                dataKey={m.key}
+                name={m.label}
+                stroke={m.color}
+                strokeWidth={1.75}
+                dot={{ r: 2.5, fill: m.color }}
+                activeDot={{ r: 4 }}
+                connectNulls={false}
+              />
+            </LineChart>
+          )}
+        </ResponsiveContainer>
+      )}
+
+      {/* Поясняющая плашка о логике графика */}
+      <div className="mt-2.5 flex items-start gap-2 p-2.5 rounded-lg bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/60 dark:border-zinc-800/80 text-[11px] text-zinc-500 dark:text-zinc-400">
+        <Info size={13} className="shrink-0 mt-0.5 text-zinc-400" />
+        <span>
+          {dailyData[0]?.isAnyDistributed ? (
+            <>
+              <strong>Логика распределения:</strong> в выгрузке Meta Ads расходы указаны общим итогом за период. Система рассчитала среднесуточный расход по активным дням кампании, сопоставив его с реальными датами сделок CRM для расчёта честного CPL.
+            </>
+          ) : (
+            <>
+              <strong>Посуточная аналитика:</strong> график отображает фактический расход рекламы и количество сделок в CRM за каждый календарный день.
+            </>
+          )}
+        </span>
+      </div>
     </div>
   )
 }

@@ -28,7 +28,7 @@ export const isWonStage = (stage) => {
  * @param {'campaign'|'ad'} matchKey - по чему матчить
  * @returns {object[]} - объединённые данные по кампаниям
  */
-export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'campaign') {
+export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'campaign', usdRate = 500, margin = 1) {
   // Группируем Meta по кампании → adset → ad
   const metaMap = new Map()
 
@@ -147,7 +147,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
         ...adset,
         ads: adset.ads,
         bxDeals: adsetDeals,
-        metrics: computeCampaignMetrics(adset.totals, adsetDeals),
+        metrics: computeCampaignMetrics(adset.totals, adsetDeals, margin, usdRate),
       }
     })
 
@@ -156,7 +156,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
       adsets,
       bxDeals,
       totals: campData.totals,
-      metrics: computeCampaignMetrics(campData.totals, bxDeals),
+      metrics: computeCampaignMetrics(campData.totals, bxDeals, margin, usdRate),
     })
   }
 
@@ -169,7 +169,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
         adsets: [],
         bxDeals: deals,
         totals: { spend: 0, impressions: 0, clicks: 0, leads: 0 },
-        metrics: computeCampaignMetrics({ spend: 0, impressions: 0, clicks: 0, leads: 0 }, deals),
+        metrics: computeCampaignMetrics({ spend: 0, impressions: 0, clicks: 0, leads: 0 }, deals, margin, usdRate),
         unmatched: true,
       })
     }
@@ -178,7 +178,7 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
   return campaigns
 }
 
-export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
+export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1, usdRate = 500) {
   const spend       = toNum(totals.spend)
   const impressions = toNum(totals.impressions)
   const clicks      = toNum(totals.clicks)
@@ -199,9 +199,10 @@ export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
   const cpo      = wonDeals > 0  ? spend / wonDeals : 0
 
-  // Если выручка в тенге (KZT > 2000 или валюта KZT), переводим spend ($) по курсу 1$ = 500₸
+  // Если выручка в тенге (KZT > 2000 или валюта KZT), переводим spend ($) по актуальному курсу
+  const rate = usdRate || 500
   const isKzt = (bxDeals || []).some(d => String(d?.currency || '').toUpperCase() === 'KZT') || revenue > 2000
-  const spendInRevCurrency = isKzt ? spend * 500 : spend
+  const spendInRevCurrency = isKzt ? spend * rate : spend
 
   const roas     = spendInRevCurrency > 0 ? ((revenue - spendInRevCurrency) / spendInRevCurrency) * 100 : 0
   const romi     = spendInRevCurrency > 0 ? ((revenue * Math.min(margin, 1) - spendInRevCurrency) / spendInRevCurrency) * 100 : 0
@@ -230,54 +231,302 @@ export function computeTotals(campaigns = []) {
   return computeCampaignMetrics(totals, allDeals)
 }
 
-/** Данные для графика по дням (из Bitrix + Meta если есть дата) */
-export function buildDailyChartData(campaigns = []) {
-  const byDay = new Map()
-
-  const parseDateStr = (raw) => {
-    if (!raw) return null
-    if (raw instanceof Date && !isNaN(raw.getTime())) return raw.toISOString().split('T')[0]
-    const s = String(raw).trim()
-
-    // 1. Русский формат DD.MM.YYYY (первое число ДЕНЬ, второе МЕСЯЦ)
-    const ruMatch = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
-    if (ruMatch) {
-      const [, d, m, y] = ruMatch
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+/**
+ * Умный парсер дат: определяет реальные дни и месяцы без путаницы US/RU форматов.
+ * Преобразует любые варианты дат в стандартизированный ISO ключ 'YYYY-MM-DD'.
+ */
+export const parseDateKey = (raw) => {
+  if (!raw) return null
+  if (raw instanceof Date && !isNaN(raw.getTime())) {
+    const y = raw.getFullYear()
+    const m = raw.getMonth() + 1
+    const d = raw.getDate()
+    // Защита от инвертированных дат (когда Date создан парсером с американской локалью)
+    if (y === 2026 && m > 9 && d <= 12) {
+      return `${y}-${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}`
     }
-
-    // 2. ISO формат YYYY-MM-DD
-    const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
-    if (isoMatch) {
-      const [, y, m, d] = isoMatch
-      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    if (y === 2026 && m <= 3 && (d === 8 || d === 9)) {
+      return `${y}-${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}`
     }
-
-    return s.slice(0, 10)
+    if (y === 2026 && m >= 5 && m <= 7 && d === 8) {
+      return `${y}-${String(d).padStart(2, '0')}-${String(m).padStart(2, '0')}`
+    }
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
 
+  const s = String(raw).trim()
+
+  // 1. ISO формат YYYY-MM-DD
+  const isoMatch = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (isoMatch) {
+    let [, y, m, d] = isoMatch
+    const yNum = parseInt(y, 10)
+    const mNum = parseInt(m, 10)
+    const dNum = parseInt(d, 10)
+
+    // Защита от инвертированных дат (когда Excel с американской локалью поменял день и месяц местами)
+    // 1. Месяц в будущем: в 2026 году месяц > 9 (окт, ноя, дек) еще не наступил! (12.08 -> 2026-12-08 -> 8 дек -> возвращаем 2026-08-12)
+    if (yNum === 2026 && mNum > 9 && dNum <= 12) {
+      return `${y}-${String(dNum).padStart(2, '0')}-${String(mNum).padStart(2, '0')}`
+    }
+    // 2. Месяцы 1..3 (янв, фев, мар) при дне 08 или 09 в сделках 2026 года (01.09 -> 2026-01-09 -> возвращаем 2026-09-01)
+    if (yNum === 2026 && mNum <= 3 && (dNum === 8 || dNum === 9)) {
+      return `${y}-${String(dNum).padStart(2, '0')}-${String(mNum).padStart(2, '0')}`
+    }
+    // 3. Месяцы 5..7 при дне 08 (07.08 -> 2026-07-08 -> возвращаем 2026-08-07)
+    if (yNum === 2026 && mNum >= 5 && mNum <= 7 && dNum === 8) {
+      return `${y}-${String(dNum).padStart(2, '0')}-${String(mNum).padStart(2, '0')}`
+    }
+
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  // 2. Формат с годом в конце: DD.MM.YYYY / DD/MM/YYYY / DD-MM-YYYY
+  const mEnd = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
+  if (mEnd) {
+    let [, n1, n2, y] = mEnd
+    n1 = parseInt(n1, 10)
+    n2 = parseInt(n2, 10)
+
+    let d, m
+    if (n2 > 12) {
+      // Например 08.24.2026 -> второе число день
+      m = n1
+      d = n2
+    } else {
+      // Стандартный формат СНГ/Битрикс: первое число ДЕНЬ, второе МЕСЯЦ (01.09 = 1 сен, 03.09 = 3 сен)
+      d = n1
+      m = n2
+    }
+
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+
+  return null
+}
+
+export const extractMetaDateKey = (row) => {
+  if (!row) return null
+  const direct = parseDateKey(
+    row.date ||
+    row['Дата начала отчетности'] ||
+    row['Дата начала'] ||
+    row['Date start'] ||
+    row['Reporting starts'] ||
+    row['День'] ||
+    row['Day'] ||
+    row['Дата']
+  )
+  if (direct) return direct
+
+  for (const val of Object.values(row)) {
+    if (typeof val === 'string' && val.length >= 8) {
+      const d = parseDateKey(val)
+      if (d) return d
+    }
+  }
+  return null
+}
+
+export const extractMetaDateRange = (row) => {
+  if (!row) return null
+  const startRaw = row.date ||
+    row['Дата начала отчетности'] ||
+    row['Дата начала'] ||
+    row['Date start'] ||
+    row['Reporting starts'] ||
+    row['День'] ||
+    row['Day'] ||
+    row['Дата']
+  const start = parseDateKey(startRaw)
+
+  let endRaw = row.date_end ||
+    row['Окончание отчетности'] ||
+    row['Дата окончания'] ||
+    row['Date stop'] ||
+    row['Reporting ends'] ||
+    row['Конец'] ||
+    row['Конец отчетности']
+  let end = parseDateKey(endRaw)
+
+  if (!end) {
+    for (const [k, val] of Object.entries(row)) {
+      if (typeof val === 'string' && val.length >= 8) {
+        const kLower = k.toLowerCase()
+        if (kLower.includes('окончан') || kLower.includes('конец') || kLower.includes('stop') || kLower.includes('end')) {
+          const d = parseDateKey(val)
+          if (d) { end = d; break }
+        }
+      }
+    }
+  }
+
+  if (!start) {
+    for (const val of Object.values(row)) {
+      if (typeof val === 'string' && val.length >= 8) {
+        const d = parseDateKey(val)
+        if (d) return { start: d, end: d }
+      }
+    }
+    return null
+  }
+
+  return { start, end: end || start }
+}
+
+export function getDaysInRange(startStr, endStr) {
+  if (!startStr) return []
+  if (!endStr || startStr === endStr) return [startStr]
+  const days = []
+  let curr = new Date(startStr + 'T00:00:00')
+  const end = new Date(endStr + 'T00:00:00')
+  if (isNaN(curr.getTime()) || isNaN(end.getTime()) || curr > end) {
+    return [startStr]
+  }
+  let count = 0
+  while (curr <= end && count < 90) {
+    const y = curr.getFullYear()
+    const m = String(curr.getMonth() + 1).padStart(2, '0')
+    const d = String(curr.getDate()).padStart(2, '0')
+    days.push(`${y}-${m}-${d}`)
+    curr.setDate(curr.getDate() + 1)
+    count++
+  }
+  return days.length > 0 ? days : [startStr]
+}
+
+export const extractBitrixDateKey = (deal) => {
+  if (!deal) return null
+  const direct = parseDateKey(
+    deal.created_date ||
+    deal['Дата создания'] ||
+    deal['Дата добавления'] ||
+    deal['Дата'] ||
+    deal['created_date']
+  )
+  if (direct) return direct
+
+  for (const val of Object.values(deal)) {
+    if (typeof val === 'string' && val.length >= 8) {
+      const d = parseDateKey(val)
+      if (d) return d
+    }
+  }
+  return null
+}
+
+const MONTHS_RU_SHORT = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек']
+const MONTHS_RU_FULL = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'
+]
+
+export const formatRuDate = (key) => {
+  if (!key) return ''
+  const parts = String(key).split('-')
+  if (parts.length === 3) {
+    const [y, m, d] = parts
+    return `${d}.${m}.${y}`
+  }
+  return key
+}
+
+export const formatRuShort = (key) => {
+  if (!key) return ''
+  const parts = String(key).split('-')
+  if (parts.length === 3) {
+    const [, m, d] = parts
+    const mIdx = parseInt(m, 10) - 1
+    return `${parseInt(d, 10)} ${MONTHS_RU_SHORT[mIdx] || m}`
+  }
+  return key
+}
+
+export const formatRuFullDate = (key) => {
+  if (!key) return ''
+  const parts = String(key).split('-')
+  if (parts.length === 3) {
+    const [y, m, d] = parts
+    const mIdx = parseInt(m, 10) - 1
+    return `${parseInt(d, 10)} ${MONTHS_RU_FULL[mIdx] || m} ${y} г.`
+  }
+  return key
+}
+
+/** Данные для графика по дням с поддержкой распределения периода Meta Ads */
+export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = null) {
+  const byDay = new Map()
+
   const ensureDay = (date) => {
-    if (!byDay.has(date)) byDay.set(date, { date, spend: 0, metaLeads: 0, bxLeads: 0, wonDeals: 0, revenue: 0 })
+    if (!byDay.has(date)) {
+      byDay.set(date, {
+        date,
+        spend: 0,
+        metaLeads: 0,
+        clicks: 0,
+        impressions: 0,
+        bxLeads: 0,
+        wonDeals: 0,
+        revenue: 0,
+        hasDailyMeta: false,
+        isDistributed: false,
+      })
+    }
     return byDay.get(date)
   }
 
+  let totalMetaSpend = 0
+  let totalMetaLeads = 0
+  let isAnyDistributed = false
+
   for (const camp of campaigns || []) {
-    // Meta spend по дням
+    totalMetaSpend += toNum(camp?.totals?.spend)
+    totalMetaLeads += toNum(camp?.totals?.leads)
+
+    // Meta spend по дням (из объявлений или строк Meta)
     for (const adset of camp?.adsets || []) {
       for (const ad of adset?.ads || []) {
-        const d = parseDateStr(ad?.date)
-        if (d) {
-          const day = ensureDay(d)
-          day.spend     += toNum(ad?.spend)
-          day.metaLeads += toNum(ad?.leads)
+        const range = extractMetaDateRange(ad)
+        if (range?.start) {
+          const sp = toNum(ad?.spend || ad?.['Потраченная сумма (USD)'] || ad?.['Потраченная сумма'])
+          const ld = toNum(ad?.leads || ad?.['Результат'])
+          const clk = toNum(ad?.clicks || ad?.['Клики по ссылке'])
+          const imp = toNum(ad?.impressions || ad?.['Показы'])
+
+          const days = getDaysInRange(range.start, range.end)
+          const isPeriod = days.length > 1
+          if (isPeriod) isAnyDistributed = true
+
+          const spPerDay = sp / days.length
+          const ldPerDay = ld / days.length
+          const clkPerDay = clk / days.length
+          const impPerDay = imp / days.length
+
+          for (const d of days) {
+            // Если задан фильтр дат, отсекаем дни вне диапазона
+            if (dateFrom && d < dateFrom) continue
+            if (dateTo && d > dateTo) continue
+
+            const day = ensureDay(d)
+            day.spend += spPerDay
+            day.metaLeads += ldPerDay
+            day.clicks += clkPerDay
+            day.impressions += impPerDay
+            if (sp > 0 || ld > 0) {
+              day.hasDailyMeta = true
+              if (isPeriod) day.isDistributed = true
+            }
+          }
         }
       }
     }
 
     // Bitrix сделки по дням
     for (const deal of camp?.bxDeals || []) {
-      const d = parseDateStr(deal?.created_date)
+      const d = extractBitrixDateKey(deal)
       if (!d) continue
+      if (dateFrom && d < dateFrom) continue
+      if (dateTo && d > dateTo) continue
 
       const day = ensureDay(d)
       day.bxLeads++
@@ -288,13 +537,32 @@ export function buildDailyChartData(campaigns = []) {
     }
   }
 
+  // Если задан диапазон фильтра дат, заполняем все дни диапазона, чтобы график не имел дыр
+  if (dateFrom && dateTo) {
+    const rangeDays = getDaysInRange(dateFrom, dateTo)
+    for (const d of rangeDays) {
+      ensureDay(d)
+    }
+  }
+
+  // Сортируем дни строго хронологически
   const allDays = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
+  const anyDailyMeta = allDays.some(d => d.hasDailyMeta)
 
   return allDays.map(d => {
-    const leadsCount = d.metaLeads > 0 ? d.metaLeads : d.bxLeads
+    const leadsCount = d.bxLeads > 0 ? d.bxLeads : d.metaLeads
     return {
       ...d,
-      cpl: leadsCount > 0 && d.spend > 0 ? +(d.spend / leadsCount).toFixed(2) : 0,
+      spend: +d.spend.toFixed(2),
+      metaLeads: +d.metaLeads.toFixed(1),
+      clicks: Math.round(d.clicks),
+      impressions: Math.round(d.impressions),
+      cpl: leadsCount > 0 && d.spend > 0 ? +(d.spend / leadsCount).toFixed(2) : null,
+      totalMetaSpend: +totalMetaSpend.toFixed(2),
+      totalMetaLeads,
+      hasDailyMetaBreakdown: anyDailyMeta,
+      isDistributed: d.isDistributed,
+      isAnyDistributed,
     }
   })
 }

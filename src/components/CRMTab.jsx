@@ -1,7 +1,6 @@
 // components/CRMTab.jsx — CRM аналитика Bitrix24: по каналам, стадиям, дням
 import { useMemo } from 'react'
-import { toNum, isWonStage } from '../utils/matchData'
-import { parseDateKey } from './DailyReportModal'
+import { toNum, isWonStage, extractBitrixDateKey } from '../utils/matchData'
 
 function detectChannel(deal) {
   const src      = String(deal?.utm_source || '').toLowerCase()
@@ -102,7 +101,7 @@ export default function CRMTab({ bitrixRows = [] }) {
         const rev = toNum(deal?.amount)
         channels[ch].revenue += rev; totalRevenue += rev; totalWon++
       }
-      const dk = parseDateKey(deal?.created_date)
+      const dk = extractBitrixDateKey(deal)
       if (dk) {
         if (!byDay[dk]) byDay[dk] = { total: 0, won: 0 }
         byDay[dk].total++

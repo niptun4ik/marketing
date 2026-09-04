@@ -12,11 +12,22 @@ import * as XLSX from 'xlsx'
  */
 function normalizeCell(value) {
   if (value instanceof Date) {
-    // Дата из XLSX с cellDates:true — конвертируем в строку
     const yyyy = value.getFullYear()
     const mm   = String(value.getMonth() + 1).padStart(2, '0')
     const dd   = String(value.getDate()).padStart(2, '0')
     return `${yyyy}-${mm}-${dd}`
+  }
+  if (typeof value === 'number') {
+    // Если число похоже на серийную дату Excel (например 46090 = 2026 год)
+    if (value > 35000 && value < 60000 && Number.isInteger(Math.floor(value))) {
+      try {
+        const dObj = XLSX.SSF.parse_date_code(value)
+        if (dObj?.y && dObj?.m && dObj?.d) {
+          return `${dObj.y}-${String(dObj.m).padStart(2, '0')}-${String(dObj.d).padStart(2, '0')}`
+        }
+      } catch (e) {}
+    }
+    return value
   }
   if (typeof value === 'string') return value.trim()
   return value ?? ''
@@ -60,8 +71,8 @@ export function parseFile(file) {
       const reader = new FileReader()
       reader.onload = (e) => {
         try {
-          // cellDates:true — Excel-даты превращаются в Date-объекты (мы их нормализуем)
-          const wb   = XLSX.read(e.target.result, { type: 'array', cellDates: true })
+          // raw: true — сохраняем оригинальные строки из ячеек (напр. "01.09.2026") без ложной US-конверсии
+          const wb   = XLSX.read(e.target.result, { type: 'array', raw: true })
           const ws   = wb.Sheets[wb.SheetNames[0]]
           const raw  = XLSX.utils.sheet_to_json(ws, { defval: '' })
           const rows = raw.map(normalizeRow)
@@ -110,13 +121,32 @@ export function autoDetectMapping(columns = [], aliases = {}) {
       original: String(c ?? ''),
       norm: String(c ?? '').toLowerCase().trim(),
     }))
-    const match = colNorm.find(({ norm }) =>
-      aliasList.some((a) => {
-        const target = String(a).toLowerCase().trim()
-        return norm === target || norm.includes(target)
-      })
+
+    // 1. Приоритет: точное совпадение
+    let match = colNorm.find(({ norm }) =>
+      aliasList.some((a) => norm === String(a).toLowerCase().trim())
     )
+
+    // 2. Вхождение подстроки с защитой от ложных срабатываний
+    if (!match) {
+      match = colNorm.find(({ norm }) =>
+        aliasList.some((a) => {
+          const target = String(a).toLowerCase().trim()
+          if (!norm.includes(target)) return false
+          // Защита: колонка "Цена за результаты" не должна определяться как лиды
+          if (canonical === 'leads' && (norm.includes('цена') || norm.includes('cpl') || norm.includes('cpc') || norm.includes('roas') || norm.includes('индикатор') || norm.includes('начальн'))) return false
+          // Защита: колонка "Бюджет группы" не должна определяться как имя группы
+          if (canonical === 'adset_name' && (norm.includes('бюджет') || norm.includes('тип'))) return false
+          // Защита: колонка "Бюджет" не должна определяться как потраченная сумма
+          if (canonical === 'spend' && norm.includes('бюджет')) return false
+          if (canonical === 'campaign_name' && norm.includes('id')) return false
+          return true
+        })
+      )
+    }
+
     mapping[canonical] = match?.original ?? ''
   }
   return mapping
 }
+

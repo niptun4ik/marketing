@@ -33,6 +33,45 @@ export default function FiltersBar({ filters, onChange }) {
     update('stages', next)
   }
 
+  const setPreset = (preset) => {
+    const today = new Date()
+    const fmtIso = (d) => {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+
+    if (preset === 'all') {
+      onChange({ ...filters, dateFrom: '', dateTo: '' })
+      return
+    }
+    if (preset === 'today') {
+      const s = fmtIso(today)
+      onChange({ ...filters, dateFrom: s, dateTo: s })
+      return
+    }
+    if (preset === 'yesterday') {
+      const y = new Date(today)
+      y.setDate(y.getDate() - 1)
+      const s = fmtIso(y)
+      onChange({ ...filters, dateFrom: s, dateTo: s })
+      return
+    }
+    if (preset === '7d') {
+      const past = new Date(today)
+      past.setDate(past.getDate() - 7)
+      onChange({ ...filters, dateFrom: fmtIso(past), dateTo: fmtIso(today) })
+      return
+    }
+    if (preset === '30d') {
+      const past = new Date(today)
+      past.setDate(past.getDate() - 30)
+      onChange({ ...filters, dateFrom: fmtIso(past), dateTo: fmtIso(today) })
+      return
+    }
+  }
+
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200/80 dark:border-zinc-800/80 rounded-xl p-3 flex flex-col sm:flex-row gap-2.5 flex-wrap items-center justify-between">
       <div className="flex flex-wrap items-center gap-2 flex-1 w-full sm:w-auto">
@@ -53,20 +92,40 @@ export default function FiltersBar({ filters, onChange }) {
           )}
         </div>
 
-        {/* Date range */}
+        {/* Date presets */}
+        <div className="flex items-center gap-0.5 bg-zinc-100 dark:bg-zinc-800/60 p-0.5 rounded-lg text-[11px]">
+          {[
+            { key: 'all', label: 'Всё' },
+            { key: 'today', label: 'Сегодня' },
+            { key: 'yesterday', label: 'Вчера' },
+            { key: '7d', label: '7 дней' },
+            { key: '30d', label: '30 дней' },
+          ].map(p => (
+            <button
+              key={p.key}
+              type="button"
+              onClick={() => setPreset(p.key)}
+              className="px-2 py-0.5 rounded text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-white dark:hover:bg-zinc-700 transition-all font-medium"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Date range inputs */}
         <div className="flex items-center gap-1.5 bg-zinc-50 dark:bg-zinc-800/60 p-0.5 rounded-lg border border-zinc-200/60 dark:border-zinc-700/60">
           <input
             type="date"
             value={filters.dateFrom || ''}
             onChange={(e) => update('dateFrom', e.target.value)}
-            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none"
+            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none font-mono"
           />
           <span className="text-zinc-400 text-xs">—</span>
           <input
             type="date"
             value={filters.dateTo || ''}
             onChange={(e) => update('dateTo', e.target.value)}
-            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none"
+            className="bg-transparent text-[11px] text-zinc-700 dark:text-zinc-300 px-2 py-1 focus:outline-none font-mono"
           />
         </div>
       </div>
