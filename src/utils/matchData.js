@@ -735,6 +735,7 @@ export function buildDailyChartData(campaigns = [], dateFrom = null, dateTo = nu
       totalCampaignSpend: +totalCampaignSpend.toFixed(2),
       totalCampaignLeads: Math.round(totalCampaignLeads),
       hasDailyMetaBreakdown: anyDailyMeta,
+      hasDailyMeta: !!d.hasDailyMeta,
       isDistributed: d.isDistributed,
       isAnyDistributed,
     }

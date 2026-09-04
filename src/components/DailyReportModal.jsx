@@ -128,6 +128,19 @@ export default function DailyReportModal({
       }
     }
 
+    // Также гарантируем учет дат из campaigns (если кампания активна и видна)
+    for (const c of campaigns || []) {
+      if (c.unmatched || hiddenNormSet.has(norm(c.campaign_name))) continue
+      const range = c?.dateRange
+      if (range?.start) {
+        const days = getDaysInRange(range.start, range.end)
+        for (const d of days) {
+          if (!map.has(d)) map.set(d, { metaCount: 0, bxCount: 0 })
+          map.get(d).metaCount++
+        }
+      }
+    }
+
     // Если в metaPeriod есть даты, гарантируем их присутствие в карте
     if (metaPeriod?.from && metaPeriod?.to) {
       const pDays = getDaysInRange(metaPeriod.from, metaPeriod.to)
@@ -170,7 +183,7 @@ export default function DailyReportModal({
     // Сортировка: по умолчанию от новых к старым (или наоборот при переключении)
     arr.sort((a, b) => sortAsc ? a.dateKey.localeCompare(b.dateKey) : b.dateKey.localeCompare(a.dateKey))
     return arr
-  }, [effectiveBitrixRows, effectiveMetaRows, metaPeriod, sortAsc])
+  }, [effectiveBitrixRows, effectiveMetaRows, campaigns, metaPeriod, hiddenNormSet, sortAsc])
 
   const [selectedKey, setSelectedKey] = useState('')
 
@@ -213,51 +226,57 @@ export default function DailyReportModal({
         if (name && !hiddenNormSet.has(norm(name))) campaignNames.add(String(name).trim())
       }
     } else {
-      // 2) Если точных строк по дням нет, проверяем кампании, в чей диапазон попадает этот день
-      for (const r of effectiveMetaRows || []) {
-        const rng = extractMetaDateRange(r)
-        const start = rng?.start || metaPeriod?.from
-        const end = (rng?.end && rng.end !== rng.start) ? rng.end : (metaPeriod?.to || start)
+      // 2) Иначе распределяем по активным кампаниям из campaigns (с их собственными dateRange)
+      for (const c of campaigns || []) {
+        if (c.unmatched || hiddenNormSet.has(norm(c.campaign_name))) continue
+        const cSpend = toNum(c?.totals?.spend)
+        const cClicks = toNum(c?.totals?.clicks)
+        const cImp = toNum(c?.totals?.impressions)
+        const cLeads = toNum(c?.totals?.leads)
+        if (cSpend <= 0 && cClicks <= 0 && cLeads <= 0 && cImp <= 0) continue
+
+        const range = c?.dateRange || metaPeriod || { start: selectedKey, end: selectedKey }
+        const start = range?.start || metaPeriod?.from
+        const end = (range?.end && range.end !== range.start) ? range.end : (metaPeriod?.to || start)
         if (!start) continue
 
         const days = getDaysInRange(start, end)
         if (days.includes(selectedKey)) {
           isDistributed = true
           const daysCount = Math.max(1, days.length)
-          const rSpend = toNum(r.spend || r['Потраченная сумма (USD)'] || r['Потраченная сумма'])
-          const rClicks = toNum(r.clicks || r['Клики по ссылке'] || r['Клики (все)'])
-          const rImp = toNum(r.impressions || r['Показы'])
-          const rLeads = toNum(r.leads || r['Результат'])
-
-          spend += rSpend / daysCount
-          clicks += rClicks / daysCount
-          impressions += rImp / daysCount
-          metaLeads += rLeads / daysCount
-
-          const name = r.campaign_name || r['Название кампании']
-          if (name && !hiddenNormSet.has(norm(name)) && (rSpend > 0 || rClicks > 0 || rLeads > 0)) {
-            campaignNames.add(String(name).trim())
-          }
+          spend += cSpend / daysCount
+          clicks += cClicks / daysCount
+          impressions += cImp / daysCount
+          metaLeads += cLeads / daysCount
+          if (c.campaign_name) campaignNames.add(String(c.campaign_name).trim())
         }
       }
 
-      // 3) Фолбэк на объединенные campaigns, если по строкам расход не распределился
-      if (spend === 0 && campaigns?.length > 0 && metaPeriod?.from && metaPeriod?.to) {
-        const pDays = getDaysInRange(metaPeriod.from, metaPeriod.to)
-        if (pDays.includes(selectedKey)) {
-          isDistributed = true
-          const daysCount = Math.max(1, pDays.length)
-          for (const c of campaigns) {
-            if (c.unmatched || hiddenNormSet.has(norm(c.campaign_name))) continue
-            const cSpend = toNum(c?.totals?.spend)
-            const cClicks = toNum(c?.totals?.clicks)
-            const cLeads = toNum(c?.totals?.leads)
-            if (cSpend > 0 || cClicks > 0 || cLeads > 0) {
-              spend += cSpend / daysCount
-              clicks += cClicks / daysCount
-              impressions += toNum(c?.totals?.impressions) / daysCount
-              metaLeads += cLeads / daysCount
-              if (c.campaign_name) campaignNames.add(String(c.campaign_name).trim())
+      // 3) Запасной обход по effectiveMetaRows, если по campaigns ничего не распределилось
+      if (spend === 0) {
+        for (const r of effectiveMetaRows || []) {
+          const rng = extractMetaDateRange(r)
+          const start = rng?.start || metaPeriod?.from
+          const end = (rng?.end && rng.end !== rng.start) ? rng.end : (metaPeriod?.to || start)
+          if (!start) continue
+
+          const days = getDaysInRange(start, end)
+          if (days.includes(selectedKey)) {
+            isDistributed = true
+            const daysCount = Math.max(1, days.length)
+            const rSpend = toNum(r.spend || r['Потраченная сумма (USD)'] || r['Потраченная сумма'])
+            const rClicks = toNum(r.clicks || r['Клики по ссылке'] || r['Клики (все)'])
+            const rImp = toNum(r.impressions || r['Показы'])
+            const rLeads = toNum(r.leads || r['Результат'])
+
+            spend += rSpend / daysCount
+            clicks += rClicks / daysCount
+            impressions += rImp / daysCount
+            metaLeads += rLeads / daysCount
+
+            const name = r.campaign_name || r['Название кампании']
+            if (name && !hiddenNormSet.has(norm(name)) && (rSpend > 0 || rClicks > 0 || rLeads > 0)) {
+              campaignNames.add(String(name).trim())
             }
           }
         }

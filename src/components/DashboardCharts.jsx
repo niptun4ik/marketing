@@ -140,11 +140,13 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
             Заявки Meta:
           </span>
           <span className="font-semibold font-mono text-zinc-800 dark:text-zinc-200">
-            {day.metaLeads > 0
-              ? `${Number(day.metaLeads).toFixed(1)} ${day.isDistributed ? '(распред.)' : ''}`
-              : day.hasDailyMetaBreakdown
-              ? '0'
-              : `${day.totalMetaLeads || day.totalCampaignLeads || 0} (за период)`}
+            {day.hasDailyMeta || day.hasDailyMetaBreakdown
+              ? Math.round(day.metaLeads || 0)
+              : (
+                <span className="text-zinc-400 font-normal text-[10px]">
+                  — (нет разбивки в Meta)
+                </span>
+              )}
           </span>
         </div>
 
@@ -181,6 +183,11 @@ const DailyTooltip = ({ active, payload, activeMetric }) => {
         {day.isDistributed && (
           <div className="pt-0.5 text-[9px] text-zinc-400 italic">
             * Отчёт Meta выгружен за период: расход распределён равномерно по активным дням кампании.
+          </div>
+        )}
+        {!day.hasDailyMeta && !day.hasDailyMetaBreakdown && (day.totalCampaignLeads > 0 || day.totalMetaLeads > 0) && (
+          <div className="pt-0.5 text-[9px] text-zinc-400 italic">
+            * В выгрузке Meta нет разбивки по дням (всего {day.totalCampaignLeads || day.totalMetaLeads} за период). Точные даты лидов зафиксированы в строке CRM.
           </div>
         )}
       </div>
