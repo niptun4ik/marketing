@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { X, Clock, Database, Loader2, Download } from 'lucide-react'
 
-export default function HistoryModal({ isOpen, onClose, onLoadHistory }) {
+export default function HistoryModal({ isOpen, onClose, onLoadHistory, session }) {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -10,14 +10,20 @@ export default function HistoryModal({ isOpen, onClose, onLoadHistory }) {
     if (isOpen) {
       fetchHistory()
     }
-  }, [isOpen])
+  }, [isOpen, session])
 
   async function fetchHistory() {
     setLoading(true)
-    const { data, error } = await supabase
+    let query = supabase
       .from('user_uploads')
       .select('id, file_name, created_at, upload_data')
       .order('created_at', { ascending: false })
+
+    if (session?.user?.id) {
+      query = query.eq('user_id', session.user.id)
+    }
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Ошибка при загрузке истории:', error)

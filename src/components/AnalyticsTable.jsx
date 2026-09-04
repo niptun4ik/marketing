@@ -26,7 +26,7 @@ const COLUMNS = [
   { key: 'cpl',         label: 'CPL (BX)',   sortable: true },
   { key: 'wonDeals',    label: 'Продажи',    sortable: true },
   { key: 'winRate',     label: 'Win Rate',   sortable: true },
-  { key: 'revenue',     label: 'Выручка',    sortable: true },
+  { key: 'revenue',     label: 'Выручка (₸)', sortable: true },
   { key: 'cpo',         label: 'CPO',        sortable: true },
   { key: 'roas',        label: 'ROAS',       sortable: true },
 ]
@@ -49,7 +49,7 @@ function renderCell(col, metrics, isTotal = false) {
       </span>
     )
     case 'spend':   return fmt(v, { style: 'currency' })
-    case 'revenue': return fmt(v, { style: 'currency' })
+    case 'revenue': return v > 0 ? `${Number(v).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} ₸` : (v === 0 ? '0 ₸' : '—')
     case 'cpl':     return fmt(v, { style: 'currency' })
     case 'metaCpl': return fmt(v, { style: 'currency' })
     case 'cpc':     return fmt(v, { style: 'currency' })
@@ -65,29 +65,38 @@ function rowBg(status) {
   return ''
 }
 
-// Ad-level row
+// Ad-level row: привязываем сделку к объявлению ТОЛЬКО при точном совпадении utm_content
 function AdRow({ ad, bxDeals = [] }) {
   const m = useMemo(() => {
     const spend       = toNum(ad?.spend)
     const impressions = toNum(ad?.impressions)
     const clicks      = toNum(ad?.clicks)
     const metaLeads   = toNum(ad?.leads)
-    const bxLeads     = (bxDeals || []).length
-    const wonDeals    = (bxDeals || []).filter((d) => isWonStage(d?.stage)).length
-    const revenue     = (bxDeals || []).filter((d) => isWonStage(d?.stage))
-                               .reduce((s, d) => s + toNum(d?.amount), 0)
+
+    // Привязываем сделку к объявлению ТОЛЬКО если utm_content явно указывает на это объявление
+    const adNameNorm = String(ad?.ad_name || '').toLowerCase().trim()
+    const adIdStr    = String(ad?.ad_id || '').trim()
+    const matchingDeals = (bxDeals || []).filter((d) => {
+      const utm = String(d?.utm_content || '').toLowerCase().trim()
+      return utm && (utm === adNameNorm || utm === adIdStr)
+    })
+
+    const bxLeads     = matchingDeals.length
+    const wonDeals    = matchingDeals.filter((d) => isWonStage(d?.stage)).length
+    const revenue     = matchingDeals.filter((d) => isWonStage(d?.stage))
+                                     .reduce((s, d) => s + toNum(d?.amount), 0)
     return {
       spend, impressions, clicks, metaLeads, bxLeads, wonDeals, revenue,
       ctr: impressions > 0 ? (clicks / impressions) * 100 : NaN,
       cpc: clicks > 0 ? spend / clicks : NaN,
       metaCr: clicks > 0 ? (metaLeads / clicks) * 100 : NaN,
-      bxCr: clicks > 0 ? (bxLeads / clicks) * 100 : NaN,
+      bxCr: clicks > 0 && bxLeads > 0 ? (bxLeads / clicks) * 100 : NaN,
       metaCpl: metaLeads > 0 ? spend / metaLeads : NaN,
       cpl: bxLeads > 0 ? spend / bxLeads : NaN,
       winRate: bxLeads > 0 ? (wonDeals / bxLeads) * 100 : NaN,
       cpo: wonDeals > 0 ? spend / wonDeals : NaN,
-      roas: spend > 0 ? ((revenue - spend) / spend) * 100 : NaN,
-      rowStatus: spend > 0 && (wonDeals === 0 || revenue < spend) ? 'red' : revenue > spend ? 'green' : 'neutral',
+      roas: spend > 0 && revenue > 0 ? ((revenue - spend * 500) / (spend * 500)) * 100 : NaN,
+      rowStatus: spend > 0 && wonDeals === 0 ? 'red' : wonDeals > 0 ? 'green' : 'neutral',
     }
   }, [ad, bxDeals])
 

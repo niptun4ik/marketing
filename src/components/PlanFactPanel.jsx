@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 
 const fmt = (n, style) => {
   if (!n && n !== 0) return '—'
+  if (style === 'kzt') return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 }) + ' ₸'
   if (style === 'currency') return n.toLocaleString('ru-RU', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 })
   if (style === 'percent') return n.toFixed(1) + '%'
   return n.toLocaleString('ru-RU', { maximumFractionDigits: 0 })
@@ -87,7 +88,7 @@ export default function PlanFactPanel({ totals }) {
               { key: 'budget',  label: 'Бюджет ($)',       placeholder: '5000' },
               { key: 'leads',   label: 'Цель по лидам',    placeholder: '100'  },
               { key: 'cpl',     label: 'Целевой CPL ($)',   placeholder: '20'   },
-              { key: 'revenue', label: 'Цель выручки ($)',  placeholder: '25000'},
+              { key: 'revenue', label: 'Цель выручки (₸)',  placeholder: '5000000'},
             ].map(({ key, label, placeholder }) => (
               <div key={key} className="space-y-1">
                 <label className="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider">
@@ -127,7 +128,7 @@ export default function PlanFactPanel({ totals }) {
               <PlanFactRow
                 label="Выручка"
                 plan={p.revenue} fact={totals.revenue}
-                style="currency"
+                style="kzt"
               />
             </div>
           )}

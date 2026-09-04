@@ -136,12 +136,20 @@ export function matchAndAggregate(metaRows = [], bitrixRows = [], matchKey = 'ca
   const campaigns = []
   for (const [campKey, campData] of metaMap) {
     const bxDeals = bitrixMap.get(campKey) || []
-    const adsets  = Array.from(campData.adsets.values()).map((adset) => ({
-      ...adset,
-      ads: adset.ads,
-      bxDeals,
-      metrics: computeCampaignMetrics(adset.totals, bxDeals),
-    }))
+    const adsets  = Array.from(campData.adsets.values()).map((adset) => {
+      // Привязываем сделку к adset ТОЛЬКО если utm_content совпадает с названием группы
+      const adsetNameNorm = norm(adset.adset_name)
+      const adsetDeals = bxDeals.filter(d => {
+        const utm = norm(d?.utm_content)
+        return utm && (utm === adsetNameNorm || adsetNameNorm.includes(utm))
+      })
+      return {
+        ...adset,
+        ads: adset.ads,
+        bxDeals: adsetDeals,
+        metrics: computeCampaignMetrics(adset.totals, adsetDeals),
+      }
+    })
 
     campaigns.push({
       campaign_name: campData.campaign_name,
@@ -190,8 +198,13 @@ export function computeCampaignMetrics(totals = {}, bxDeals = [], margin = 1) {
   const metaCpl  = metaLeads > 0 ? spend / metaLeads : 0
   const winRate  = bxLeads > 0   ? (wonDeals / bxLeads) * 100 : 0
   const cpo      = wonDeals > 0  ? spend / wonDeals : 0
-  const roas     = spend > 0     ? ((revenue - spend) / spend) * 100 : 0
-  const romi     = spend > 0     ? ((revenue * Math.min(margin, 1) - spend) / spend) * 100 : 0
+
+  // Если выручка в тенге (KZT > 2000 или валюта KZT), переводим spend ($) по курсу 1$ = 500₸
+  const isKzt = (bxDeals || []).some(d => String(d?.currency || '').toUpperCase() === 'KZT') || revenue > 2000
+  const spendInRevCurrency = isKzt ? spend * 500 : spend
+
+  const roas     = spendInRevCurrency > 0 ? ((revenue - spendInRevCurrency) / spendInRevCurrency) * 100 : 0
+  const romi     = spendInRevCurrency > 0 ? ((revenue * Math.min(margin, 1) - spendInRevCurrency) / spendInRevCurrency) * 100 : 0
 
   return {
     spend, impressions, clicks, metaLeads, bxLeads, wonDeals,
@@ -276,20 +289,6 @@ export function buildDailyChartData(campaigns = []) {
   }
 
   const allDays = Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
-
-  // Если у Meta нет дат, а у Bitrix есть даты — распределим общий spend пропорционально дням Bitrix
-  const hasMetaDates = allDays.some(d => d.spend > 0 || d.metaLeads > 0)
-  if (!hasMetaDates && allDays.length > 0) {
-    const totalCampSpend = (campaigns || []).reduce((sum, c) => sum + toNum(c?.totals?.spend), 0)
-    const totalCampMetaLeads = (campaigns || []).reduce((sum, c) => sum + toNum(c?.totals?.leads), 0)
-    const totalBxLeads = allDays.reduce((sum, d) => sum + d.bxLeads, 0)
-
-    allDays.forEach(d => {
-      const share = totalBxLeads > 0 ? (d.bxLeads / totalBxLeads) : (1 / allDays.length)
-      d.spend = +(totalCampSpend * share).toFixed(2)
-      d.metaLeads = Math.round(totalCampMetaLeads * share)
-    })
-  }
 
   return allDays.map(d => {
     const leadsCount = d.metaLeads > 0 ? d.metaLeads : d.bxLeads

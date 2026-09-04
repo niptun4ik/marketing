@@ -246,6 +246,7 @@ export default function App() {
             isOpen={showHistory}
             onClose={() => setShowHistory(false)}
             onLoadHistory={handleLoadHistory}
+            session={session}
           />
 
           {/* Settings Modal */}

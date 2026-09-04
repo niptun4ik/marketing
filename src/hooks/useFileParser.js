@@ -86,9 +86,12 @@ export function parseFile(file) {
  */
 export function applyMapping(rows = [], mapping = {}) {
   return (rows || []).map((row) => {
-    const mapped = {}
+    // Сохраняем оригинальные поля строки как fallback для умного сопоставления
+    const mapped = { ...row }
     for (const [canonical, actual] of Object.entries(mapping)) {
-      mapped[canonical] = row?.[actual] ?? ''
+      if (actual) {
+        mapped[canonical] = row?.[actual] ?? ''
+      }
     }
     return mapped
   })

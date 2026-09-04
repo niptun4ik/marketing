@@ -5,6 +5,13 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export default async function handler(req, res) {
+  // Защита от несанкционированного вызова из интернета
+  const authHeader = req.headers['authorization'] || req.headers['x-cron-secret']
+  const cronSecret = process.env.CRON_SECRET
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && authHeader !== cronSecret) {
+    return res.status(401).json({ error: 'Unauthorized: missing or invalid cron secret' })
+  }
+
   // Защита от запуска без ключей
   if (!supabaseUrl || !supabaseServiceKey) {
     return res.status(500).json({ 

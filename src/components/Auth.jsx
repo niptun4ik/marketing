@@ -5,8 +5,21 @@ import { User, Lock, LogIn, UserPlus, AlertTriangle, Bug } from 'lucide-react'
 const debugUrl = import.meta.env.VITE_SUPABASE_URL
 const debugKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 
-// Превращаем логин в фейковый email, понятный Supabase
-const toFakeEmail = (login) => `${login.toLowerCase().trim().replace(/[^a-z0-9_.-]/g, '_')}@marketing.local`
+// Карта транслитерации для кириллических логинов
+const RU_TO_LAT = {
+  а:'a', б:'b', в:'v', г:'g', д:'d', е:'e', ё:'yo', ж:'zh', з:'z', и:'i', й:'y',
+  к:'k', л:'l', м:'m', н:'n', о:'o', п:'p', р:'r', с:'s', т:'t', у:'u', ф:'f',
+  х:'kh', ц:'ts', ч:'ch', ш:'sh', щ:'shch', ъ:'', ы:'y', ь:'', э:'e', ю:'yu', я:'ya',
+  ә:'a', ғ:'g', қ:'q', ң:'n', ө:'o', ұ:'u', ү:'u', һ:'h', і:'i',
+}
+
+// Превращаем логин в уникальный валидный email, понятный Supabase
+const toFakeEmail = (login) => {
+  const clean = String(login || '').toLowerCase().trim()
+  const translit = clean.split('').map(char => RU_TO_LAT[char] || char).join('')
+  const safe = translit.replace(/[^a-z0-9_.-]/g, '_').replace(/_+/g, '_')
+  return `${safe || 'user'}@marketing.local`
+}
 
 export default function Auth() {
   const [loading, setLoading]   = useState(false)

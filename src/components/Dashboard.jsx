@@ -6,7 +6,7 @@ import DashboardCharts from './DashboardCharts'
 import AnalyticsTable from './AnalyticsTable'
 import ExportButton from './ExportButton'
 import PlanFactPanel from './PlanFactPanel'
-import DailyReportModal from './DailyReportModal'
+import DailyReportModal, { parseDateKey } from './DailyReportModal'
 import CRMTab from './CRMTab'
 import { FileText } from 'lucide-react'
 import {
@@ -31,6 +31,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
   const [matchKey, setMatchKey] = useState('campaign')
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [margin, setMargin] = useState(30)
+  const [usdRate, setUsdRate] = useState(500)
   const [stageOrder, setStageOrder] = useState([])
   const [showDailyReport, setShowDailyReport] = useState(false)
   const [activeTab, setActiveTab] = useState('meta') // 'meta' | 'crm'
@@ -48,20 +49,24 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       })
   }, [session])
 
-  // Filter Bitrix rows by date and stage
+  // Фильтруем Meta по выбранному периоду дат
+  const filteredMeta = useMemo(() => {
+    if (!filters.dateFrom && !filters.dateTo) return metaRows || []
+    return (metaRows || []).filter((row) => {
+      const d = parseDateKey(row?.date)
+      if (!d) return true
+      if (filters.dateFrom && d < filters.dateFrom) return false
+      if (filters.dateTo   && d > filters.dateTo)   return false
+      return true
+    })
+  }, [metaRows, filters.dateFrom, filters.dateTo])
+
+  // Фильтруем Bitrix по дате (через точный русский/ISO парсер) и стадии
   const filteredBitrix = useMemo(() => {
     return (bitrixRows || []).filter((deal) => {
-      let date = ''
-      if (typeof deal?.created_date === 'string') {
-        date = deal.created_date.split('T')[0]
-      } else if (deal?.created_date instanceof Date) {
-        date = deal.created_date.toISOString().split('T')[0]
-      } else if (deal?.created_date) {
-        date = String(deal.created_date).slice(0, 10)
-      }
-
-      if (filters.dateFrom && date && date < filters.dateFrom) return false
-      if (filters.dateTo   && date && date > filters.dateTo)   return false
+      const d = parseDateKey(deal?.created_date)
+      if (filters.dateFrom && d && d < filters.dateFrom) return false
+      if (filters.dateTo   && d && d > filters.dateTo)   return false
       const stage = String(deal?.stage || '').trim()
       if (filters.stages?.length && stage && !filters.stages.includes(stage)) {
         const isCustomFile = !bitrixRows.some((d) => ['Новая', 'В работе', 'Успешно', 'Проиграна'].includes(String(d?.stage || '').trim()))
@@ -71,10 +76,10 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
     })
   }, [bitrixRows, filters])
 
-  // Match + aggregate
+  // Match + aggregate с учётом актуального курса $
   const campaigns = useMemo(
-    () => matchAndAggregate(metaRows, filteredBitrix, matchKey),
-    [metaRows, filteredBitrix, matchKey]
+    () => matchAndAggregate(filteredMeta, filteredBitrix, matchKey, usdRate),
+    [filteredMeta, filteredBitrix, matchKey, usdRate]
   )
 
   // Search filter on campaign level
@@ -101,8 +106,8 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       }),
       { spend: 0, impressions: 0, clicks: 0, leads: 0 }
     )
-    return computeCampaignMetrics(aggTotals, allDeals, margin / 100)
-  }, [filteredCampaigns, margin])
+    return computeCampaignMetrics(aggTotals, allDeals, margin / 100, usdRate)
+  }, [filteredCampaigns, margin, usdRate])
 
   const allBxDeals = useMemo(() => filteredCampaigns.flatMap(c => c?.bxDeals || []), [filteredCampaigns])
 
@@ -140,7 +145,7 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
                 <FileText size={13} />
                 <span>Отчет за день</span>
               </button>
-              <ExportButton campaigns={filteredCampaigns} />
+              <ExportButton campaigns={filteredCampaigns} usdRate={usdRate} />
             </>
           )}
         </div>
@@ -172,7 +177,13 @@ export default function Dashboard({ metaRows, bitrixRows, session }) {
       ) : (
         <>
           {/* KPIs */}
-          <KPICards totals={totals} margin={margin} onMarginChange={setMargin} />
+          <KPICards
+            totals={totals}
+            margin={margin}
+            onMarginChange={setMargin}
+            usdRate={usdRate}
+            onUsdRateChange={setUsdRate}
+          />
 
           {/* Plan-Fact */}
           <PlanFactPanel totals={totals} />

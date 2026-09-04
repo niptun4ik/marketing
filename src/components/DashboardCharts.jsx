@@ -29,7 +29,9 @@ const CustomTooltip = ({ active, payload, label }) => {
             <span className="text-zinc-500 dark:text-zinc-400">{p.name}:</span>
           </div>
           <span className="font-semibold text-zinc-800 dark:text-zinc-200 font-mono">
-            {p.dataKey === 'spend' || p.dataKey === 'revenue' || p.dataKey === 'cpl'
+            {p.dataKey === 'revenue'
+              ? `${Number(p.value || 0).toLocaleString('ru-RU')} ₸`
+              : p.dataKey === 'spend' || p.dataKey === 'cpl'
               ? `$${Number(p.value || 0).toFixed(2)}`
               : Number(p.value || 0).toLocaleString('ru-RU')}
           </span>
@@ -46,14 +48,15 @@ function SpendRevenueChart({ data }) {
   )
   return (
     <ResponsiveContainer width="100%" height={230}>
-      <BarChart data={data.campaignData} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+      <BarChart data={data.campaignData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
         <CartesianGrid strokeDasharray="2 2" stroke="#e4e4e7" strokeOpacity={0.6} vertical={false} />
         <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false} />
-        <YAxis tickFormatter={v => `$${fmtK(v)}`} tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false} width={45} />
+        <YAxis yAxisId="spend" tickFormatter={v => `$${fmtK(v)}`} tick={{ fontSize: 10, fill: '#71717a' }} axisLine={false} tickLine={false} width={45} />
+        <YAxis yAxisId="revenue" orientation="right" tickFormatter={v => `${fmtK(v)}₸`} tick={{ fontSize: 10, fill: '#10b981' }} axisLine={false} tickLine={false} width={45} />
         <Tooltip content={<CustomTooltip />} />
         <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-        <Bar dataKey="spend"   name="Расход"  fill={COLORS.spend}   radius={[3,3,0,0]} maxBarSize={28} />
-        <Bar dataKey="revenue" name="Выручка" fill={COLORS.revenue} radius={[3,3,0,0]} maxBarSize={28} />
+        <Bar yAxisId="spend" dataKey="spend"   name="Расход ($)"  fill={COLORS.spend}   radius={[3,3,0,0]} maxBarSize={24} />
+        <Bar yAxisId="revenue" dataKey="revenue" name="Выручка (₸)" fill={COLORS.revenue} radius={[3,3,0,0]} maxBarSize={24} />
       </BarChart>
     </ResponsiveContainer>
   )
